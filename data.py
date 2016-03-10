@@ -22,7 +22,7 @@ def load_data(filename='hand_training.hdf5'):
 
 
 def create_generator(shuffle, batch_size, seq_coord, coord_idx,
-                     seq_strings, strings_idx):
+                     seq_strings, strings_idx, chunk=None):
     n_seq = coord_idx.shape[0]
     idx = np.arange(n_seq)
     np.random.shuffle(idx)
@@ -32,11 +32,21 @@ def create_generator(shuffle, batch_size, seq_coord, coord_idx,
 
     def generator():
         for i in range(0, n_seq-batch_size, batch_size):
-            yield create_batch(slice(i, i+batch_size),
+            pt_batch, pt_mask_batch, str_batch = \
+                create_batch(slice(i, i+batch_size),
                                seq_coord, coord_idx, seq_strings, strings_idx)
+            if not chunk:
+                yield (pt_batch, pt_mask_batch, str_batch), True
+                continue
+
+            l_seq = pt_batch.shape[0]
+            for j in range(0, l_seq-chunk-1, chunk):
+                s = slice(j, j+chunk)
+                yield (pt_batch[s], pt_mask_batch[s], str_batch[s]), False
+            s = slice(j + chunk, None)
+            yield (pt_batch[s], pt_mask_batch[s], str_batch[s]), True
 
     return generator
-
 
 
 def create_batch(slice, coord, coord_idx, strings, strings_idx, M=None):

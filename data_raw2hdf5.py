@@ -97,7 +97,8 @@ print time.clock() - start
 #     plot_seq(pt_batch[:, i], pt_mask_batch[:, i].astype(bool))
 
 
-
+idx = np.all(pt_seq <= 100, axis=1)
+pt_seq = pt_seq[idx]
 
 # Normalize
 pt_seq[:, 0] = (pt_seq[:, 0] - M_x) / s_x
