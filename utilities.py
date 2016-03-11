@@ -6,39 +6,58 @@ matplotlib.use('Agg')
 import matplotlib.pyplot as plt
 
 
-M_x = 8.16648
-M_y = 0.111465
-s_x = 41.9263
-s_y = 37.0967
+M_x = 8.18586
+M_y = 0.11457
+s_x = 40.3719
+s_y = 37.0466
 
 
-def plot_batch(pt_batch, pt_mask_batch=None, show=False, folder_path=None, file_name=None):
-    pt_batch[:, :, 0] = s_x * pt_batch[:, :, 0] + M_x
-    pt_batch[:, :, 1] = s_y * pt_batch[:, :, 1] + M_y
+def plot_batch(pt_batch, pt_mask_batch=None, use_mask=False, show=False, folder_path=None, file_name=None):
+    batch_normed = np.zeros_like(pt_batch, dtype=pt_batch.dtype)
+    batch_normed[:] = pt_batch
+    batch_normed[:, :, 0] = s_x * batch_normed[:, :, 0] + M_x
+    batch_normed[:, :, 1] = s_y * batch_normed[:, :, 1] + M_y
 
-    for i in range(pt_batch.shape[1]):
-        mask_term = None
-        if pt_mask_batch:
+    print 'mean x: {}'.format(batch_normed[:, :, 0].mean())
+    print 'std x: {}'.format(batch_normed[:, :, 0].std())
+    print 'mean y: {}'.format(batch_normed[:, :, 1].mean())
+    print 'std y: {}'.format(batch_normed[:, :, 1].std())
+
+    n_samples = batch_normed.shape[1]
+    fig = plt.figure(figsize=(n_samples*3, 10))
+
+    for i in range(n_samples):
+        mask_term = np.array([])
+        if use_mask:
             mask_term = pt_mask_batch[:, i].astype(bool)
-        plt.figure()
-        plot_seq(pt_batch[:, i], mask_term, show)
-        if folder_path and file_name:
-            plt.savefig(os.path.join(folder_path, file_name + '_{}.png'.format(i)))
-        plt.close()
+        subplot = fig.add_subplot(n_samples, 1, i + 1)
+        plot_seq(subplot, batch_normed[:, i], mask_term)
+
+    if folder_path and file_name:
+        fig.savefig(os.path.join(folder_path, file_name + '.png'))
+    if show:
+        plt.show()
+    plt.close()
 
 
-def plot_seq(seq, mask=None, show=False):
-    coord = seq[:, 0:2]
-    pin = seq[:, 2].astype(bool)
+def plot_seq(subplot, seq_pt, seq_mask=np.array([]), norm=False):
+    if norm:
+        seq_normed = np.zeros_like(seq_pt, dtype=seq_pt.dtype)
+        seq_normed[:] = seq_pt
+        seq_normed[:, 0] = s_x * seq_normed[:, 0] + M_x
+        seq_normed[:, 1] = s_y * seq_normed[:, 1] + M_y
+    else:
+        seq_normed = seq_pt
 
-    pos = np.where(pin)[0]+1
+    coord = seq_normed[:, 0:2]
+    penup = seq_normed[:, 2].astype(bool)
 
-    if mask:
-        coord = np.cumsum(coord[mask], axis=0)
+    pos = np.where(penup)[0]+1
+
+    if seq_mask.size:
+        coord = np.cumsum(coord[seq_mask.astype(bool)], axis=0)
     else:
         coord = np.cumsum(coord, axis=0)
     coord = np.insert(coord, pos, [np.nan, np.nan], axis=0)
 
-    plt.plot(coord[:, 0], -coord[:, 1])
-    if show:
-        plt.show()
+    subplot.plot(coord[:, 0], -coord[:, 1])

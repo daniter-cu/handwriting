@@ -18,6 +18,7 @@ def load_data(filename='hand_training.hdf5'):
     strings_seq = train_data['str_seq'][:]
     strings_idx = train_data['str_idx'][:]
 
+    train_data.close()
     return coord_seq, coord_idx, strings_seq, strings_idx
 
 

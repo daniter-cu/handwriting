@@ -9,13 +9,13 @@ import numpy as np
 import h5py
 
 # Config
-dataset = 'training'
+dataset = 'validation'
 
 # mean and std used for standardization of the data
-M_x = 8.16648
-M_y = 0.111465
-s_x = 41.9263
-s_y = 37.0967
+M_x = 8.18586
+M_y = 0.11457
+s_x = 40.3719
+s_y = 37.0466
 
 data_folder = join(os.environ['DATA_PATH'], 'handwriting')
 strokes_filename = join(data_folder, dataset + '_set.txt')
@@ -39,70 +39,83 @@ pt_seq = []  # all sequences concatenated
 pt_idx = []  # dim (n_seq, 2) beginning and end of each sequence
 str_seq = []  # all sequences concatenated
 str_idx = []  # dim (n_seq, 2) beginning and end of each sequence
-seqTags = []
 
 old_string = 0
 old_point = 0
+
+
+def read_file(file_path):
+    pts = []
+    pre_pt = np.array([])
+    for trace in parse(file_path).getElementsByTagName('Stroke'):
+        for coords in trace.getElementsByTagName('Point'):
+            pt = np.array([coords.getAttribute('x').strip(),
+                           coords.getAttribute('y').strip(), 0],
+                          dtype='float32')
+            if not len(pre_pt):
+                pre_pt = pt
+            diff = pt - pre_pt
+            if np.any(diff >= 1000) or np.any(diff <= -1000):
+                return False
+            diff[-1] = 0
+            pre_pt = pt
+            pts.append(diff)
+        pts[-1][-1] = 1
+
+    return pts, get_target_string(file_path)
+
+last_pt_idx = 0
+last_str_idx = 0
 for ii, l in enumerate(file(strokes_filename).readlines()):
-    # if ii == 10:
-    #     break
+    if ii == 10:
+        break
     file_path = l.strip()
     file_path = join(data_folder, file_path)
 
     if not len(file_path):
         continue
 
-    seqTags.append(file_path)
+    res = read_file(file_path)
+    if not res:
+        continue
 
-    seqTxt = get_target_string(file_path)
-    str_idx.append((old_string, old_string + len(seqTxt)))
-    old_string += len(seqTxt)
-    str_seq.append(seqTxt)
+    pts, str = res
+    pt_seq.extend(pts)
+    str_seq.append(str)
 
-    firstCoord = np.array([])
-    for trace in parse(file_path).getElementsByTagName('Stroke'):
-        for coords in trace.getElementsByTagName('Point'):
-            pt = np.array([float(coords.getAttribute('x').strip()), float(coords.getAttribute('y').strip())])
-            last = np.array([float(pt[0]), float(pt[1]), 0.0])
-            if len(firstCoord) == 0: firstCoord = last
-            last = last - firstCoord
-            pt_seq.append(last)
-        pt_seq[-1][-1] = 1
-    pt_idx.append((old_point, len(pt_seq)))
-    old_point = len(pt_seq)
+    next_pt_idx = last_pt_idx + len(pts)
+    pt_idx.append((last_pt_idx, next_pt_idx))
+    last_pt_idx = next_pt_idx
+
+    next_str_idx = last_str_idx + len(str)
+    str_idx.append((last_str_idx, next_str_idx))
+    last_str_idx = next_str_idx
 
 str_seq = "".join(str_seq)
 str_seq = str_seq.encode("ascii", "ignore")
 pt_seq = np.array(pt_seq, dtype='float32')
 
-# Compute offsets instead of absolute positions
-firstIx = 0
-for i in range(len(pt_idx)):
-    l = pt_idx[i][1] - pt_idx[i][0]
-    for k in reversed(range(l)):
-        pt_seq[firstIx + k][:2] = pt_seq[firstIx + k][:2] - pt_seq[firstIx + k - 1][:2]
-    pt_seq[firstIx] = np.array([0, 0, 0])
-    firstIx += l
-
 print time.clock() - start
 
 
-# Visualisation
-# from data_generation import create_batch
-# from utilities import plot_seq
-#
-# pt_batch, pt_mask_batch, str_batch = \
-#     create_batch(slice(0,100), points, points_seq, strings, strings_seq)
-# for i in range(100):
-#     plot_seq(pt_batch[:, i], pt_mask_batch[:, i].astype(bool))
-
-
-idx = np.all(pt_seq <= 100, axis=1)
-pt_seq = pt_seq[idx]
+# M_x = pt_seq[:, 0].mean()
+# M_y = pt_seq[:, 1].mean()
+# s_x = pt_seq[:, 0].std()
+# s_y = pt_seq[:, 1].std()
 
 # Normalize
 pt_seq[:, 0] = (pt_seq[:, 0] - M_x) / s_x
 pt_seq[:, 1] = (pt_seq[:, 1] - M_y) / s_y
+
+
+
+from utilities import plot_batch
+from data import create_batch
+pt_batch, pt_mask_batch, str_batch = \
+    create_batch(slice(0, 4), pt_seq, pt_idx, str_seq, str_idx)
+plot_batch(pt_batch, pt_mask_batch, use_mask=True, show=True)
+
+
 
 
 f = h5py.File(h5_filename, 'w')
