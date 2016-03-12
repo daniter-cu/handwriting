@@ -4,7 +4,7 @@ import theano.tensor as T
 from theano.tensor.shared_randomstreams import RandomStreams
 
 import numpy as np
-from lasagne.init import GlorotNormal
+from lasagne.init import GlorotNormal, Orthogonal
 
 from raccoon.archi import GRULayer
 
@@ -20,7 +20,7 @@ def logsumexp(x, axis=None):
 
 
 class MixtureGaussians2D:
-    def __init__(self, n_in, n_mixtures, initializer, eps=1e-8):
+    def __init__(self, n_in, n_mixtures, initializer, eps=1e-5):
         self.n_mixtures = n_mixtures
         self.eps = eps
 
@@ -41,12 +41,12 @@ class MixtureGaussians2D:
         """
         n = self.n_mixtures
         out = T.dot(h, w) + b
-        prop = T.nnet.softmax(out[:, :n]) + self.eps
-        mean_x = out[:, n: n*2]
-        mean_y = out[:, n*2: n*3]
-        std_x = T.exp(out[:, n*3: n*4]) + self.eps
-        std_y = T.exp(out[:, n*4: n*5]) + self.eps
-        rho = T.tanh(out[:, n*5: n*6])
+        prop = T.nnet.softmax(out[:, :n])
+        mean_x = out[:, n:n*2]
+        mean_y = out[:, n*2:n*3]
+        std_x = T.exp(out[:, n*3:n*4]) + self.eps
+        std_y = T.exp(out[:, n*4:n*5]) + self.eps
+        rho = T.tanh(out[:, n*5:n*6])
         rho = (1+rho + self.eps) / (2 + 2*self.eps) - 1
         bernoulli = T.nnet.sigmoid(out[:, -1])
         bernoulli = (bernoulli + self.eps) / (1 + 2*self.eps)
@@ -67,17 +67,17 @@ class MixtureGaussians2D:
         s_x = std_x[v, mode]
         s_y = std_y[v, mode]
         r = rho[v, mode]
-        cov = r * (s_x * s_y)
+        # cov = r * (s_x * s_y)
 
         normal = srng.normal((h.shape[0], 2))
         x = normal[:, 0]
         y = normal[:, 1]
 
-        x_n = T.shape_padright(s_x * x + cov * y + m_x)
-        y_n = T.shape_padright(s_y * y + cov * x + m_y)
+        # x_n = T.shape_padright(s_x * x + cov * y + m_x)
+        # y_n = T.shape_padright(s_y * y + cov * x + m_y)
 
-        # x_n = T.shape_padright(m_x + s_x * x)
-        # y_n = T.shape_padright(m_y + s_y * (x * r + y * T.sqrt(1.-r**2)))
+        x_n = T.shape_padright(m_x + s_x * x)
+        y_n = T.shape_padright(m_y + s_y * (x * r + y * T.sqrt(1.-r**2)))
 
         uniform = srng.uniform((h.shape[0],))
         pin = T.shape_padright(T.cast(bernoulli > uniform, floatX))
@@ -90,9 +90,9 @@ class MixtureGaussians2D:
         mask_seq: (seq, batch)
         tg_seq: (seq, batch, features=3)
         """
-        h_seq = T.reshape(h_seq, (-1, h_seq.shape[2]))
-        tg_seq = T.reshape(tg_seq, (-1, tg_seq.shape[2]))
-        mask_seq = T.reshape(mask_seq, (-1, mask_seq.shape[1]))
+        h_seq = T.reshape(h_seq, (-1, h_seq.shape[-1]))
+        tg_seq = T.reshape(tg_seq, (-1, tg_seq.shape[-1]))
+        mask_seq = T.reshape(mask_seq, (-1, mask_seq.shape[-1]))
 
         prop, mean_x, mean_y, std_x, std_y, rho, bernoulli = \
             self.compute_parameters(h_seq, self.w, self.b)
@@ -141,6 +141,7 @@ class MixtureGaussians2D:
 class Model1:
     def __init__(self, gain_ini, n_hidden, n_mixtures):
         ini = GlorotNormal(gain_ini)
+        # ini = Orthogonal(gain_ini)
 
         self.gru_layer = GRULayer(3, n_hidden, ini)
 
@@ -161,19 +162,19 @@ class Model1:
 
         return loss, [(h_ini, seq_h[-1])] + scan_updates, monitoring
 
-    def prediction(self, coord_ini, h_ini, n_steps=100):
+    def prediction(self, coord_ini, h_ini, n_steps=500):
 
         def gru_step(coord_pre, h_pre,
-                     w, wr, wu, u, b, ur, br, uu, bu, w_mixt, b_mixt):
+                     w, wr, wu, b, br, bu, u, ur, uu, w_mixt, b_mixt):
 
-            x_in = T.dot(coord_pre, w)
-            x_r = T.dot(coord_pre, wr)
-            x_u = T.dot(coord_pre, wu)
+            x_in = T.dot(coord_pre, w) + b
+            x_r = T.dot(coord_pre, wr) + br
+            x_u = T.dot(coord_pre, wu) + bu
 
-            r_gate = T.nnet.sigmoid(x_r + T.dot(h_pre, ur) + br)
-            u_gate = T.nnet.sigmoid(x_u + T.dot(h_pre, uu) + bu)
+            r_gate = T.nnet.sigmoid(x_r + T.dot(h_pre, ur))
+            u_gate = T.nnet.sigmoid(x_u + T.dot(h_pre, uu))
 
-            h_new = T.tanh(x_in + T.dot(r_gate * h_pre, u) + b)
+            h_new = T.tanh(x_in + T.dot(r_gate * h_pre, u))
 
             h = (1-u_gate)*h_pre + u_gate*h_new
 

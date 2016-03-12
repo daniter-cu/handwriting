@@ -4,7 +4,7 @@ from lasagne.updates import adam
 
 from raccoon import *
 
-from data import create_generator, load_data, create_batch
+from data import create_generator, load_data, extract_sequence
 from model import Model1
 from extensions import Sampler
 
@@ -12,18 +12,18 @@ from matplotlib import pyplot as plt
 from utilities import plot_seq, plot_batch
 
 theano.config.floatX = 'float32'
-# theano.config.optimizer = 'None'
+theano.config.optimizer = 'None'
 floatX = theano.config.floatX
 np.random.seed(42)
 
 # CONFIG
-learning_rate = 0.01
-n_hidden = 400
+learning_rate = 0.05
+n_hidden = 900
 n_mixtures = 20
-gain = 1
-batch_size = 100
+gain = 0.1
+batch_size = 20
 chunk = 20
-every = 200
+every = 10000
 tmp_path = os.environ.get('TMP_PATH')
 dump_path = os.path.join(tmp_path, 'handwriting',
                          str(np.random.randint(0, 100000000, 1)[0]))
@@ -36,7 +36,7 @@ tr_coord_seq, tr_coord_idx, tr_strings_seq, tr_strings_idx = \
 
 
 # pt_batch, pt_mask_batch, str_batch = \
-#     create_batch(slice(0, 4),
+#     extract_sequence(slice(0, 4),
 #                    tr_coord_seq, tr_coord_idx, tr_strings_seq, tr_strings_idx)
 # plot_batch(pt_batch, pt_mask_batch, use_mask=True, show=True)
 
@@ -66,7 +66,16 @@ grads = T.grad(loss, params)
 # grads = [clip_norm(g, 1, norm) for g in grads]
 
 
-# updates_params = adam(grads, params, 0.0001)
+def gradient_clipping(grads, rescale=5.):
+    grad_norm = tensor.sqrt(sum(map(lambda x: tensor.sqr(x).sum(), grads)))
+    scaling_num = rescale
+    scaling_den = tensor.maximum(rescale, grad_norm)
+    scaling = scaling_num / scaling_den
+    return [g * scaling for g in grads]
+
+grads = gradient_clipping(grads)
+
+# updates_params = adam(grads, params, 0.0003)
 
 updates_params = []
 for p, g in zip(params, grads):
@@ -98,13 +107,13 @@ h_ini.set_value(np.zeros((batch_size, n_hidden), dtype=floatX))
 try:
     while True:
         epoch += 1
-        for (pt_batch, pt_mask_batch, str_batch), next_seq in batch_gen():
+        for (pt_in, pt_tg, pt_mask, str), next_seq in batch_gen():
             # plt.figure(figsize=(3, 10))
-            # plot_seq(plt, pt_batch[:, 0], pt_mask_batch[:, 0], True)
+            # plot_seq(plt, pt_in[:, 0], pt_mask[:, 0], True)
             # plt.show()
             res = train_m.process_batch(epoch, it,
-                                        pt_batch[:-1], 0*pt_batch[1:],
-                                        pt_mask_batch[1:])
+                                        pt_in, pt_tg,
+                                        pt_mask)
             if next_seq:
                 h_ini.set_value(np.zeros((batch_size, n_hidden), dtype=floatX))
             it += 1

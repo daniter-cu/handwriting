@@ -18,10 +18,10 @@ def plot_batch(pt_batch, pt_mask_batch=None, use_mask=False, show=False, folder_
     batch_normed[:, :, 0] = s_x * batch_normed[:, :, 0] + M_x
     batch_normed[:, :, 1] = s_y * batch_normed[:, :, 1] + M_y
 
-    print 'mean x: {}'.format(batch_normed[:, :, 0].mean())
-    print 'std x: {}'.format(batch_normed[:, :, 0].std())
-    print 'mean y: {}'.format(batch_normed[:, :, 1].mean())
-    print 'std y: {}'.format(batch_normed[:, :, 1].std())
+    # print 'mean x: {}'.format(batch_normed[:, :, 0].mean())
+    # print 'std x: {}'.format(batch_normed[:, :, 0].std())
+    # print 'mean y: {}'.format(batch_normed[:, :, 1].mean())
+    # print 'std y: {}'.format(batch_normed[:, :, 1].std())
 
     n_samples = batch_normed.shape[1]
     fig = plt.figure(figsize=(n_samples*3, 10))
@@ -49,15 +49,15 @@ def plot_seq(subplot, seq_pt, seq_mask=np.array([]), norm=False):
     else:
         seq_normed = seq_pt
 
+    if seq_mask.size:
+        seq_normed = seq_normed[seq_mask.astype(bool)]
+
     coord = seq_normed[:, 0:2]
     penup = seq_normed[:, 2].astype(bool)
 
     pos = np.where(penup)[0]+1
 
-    if seq_mask.size:
-        coord = np.cumsum(coord[seq_mask.astype(bool)], axis=0)
-    else:
-        coord = np.cumsum(coord, axis=0)
+    coord = np.cumsum(coord, axis=0)
     coord = np.insert(coord, pos, [np.nan, np.nan], axis=0)
 
     subplot.plot(coord[:, 0], -coord[:, 1])

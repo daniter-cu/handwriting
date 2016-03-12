@@ -33,24 +33,29 @@ def create_generator(shuffle, batch_size, seq_coord, coord_idx,
 
     def generator():
         for i in range(0, n_seq-batch_size, batch_size):
-            pt_batch, pt_mask_batch, str_batch = \
-                create_batch(slice(i, i+batch_size),
-                               seq_coord, coord_idx, seq_strings, strings_idx)
+            pt, pt_mask, str = \
+                extract_sequence(slice(i, i + batch_size),
+                                 seq_coord, coord_idx, seq_strings, strings_idx)
+
+            pt_input = pt[:-1]
+            pt_tg = pt[1:]
+            pt_mask = pt_mask[1:]
+
             if not chunk:
-                yield (pt_batch, pt_mask_batch, str_batch), True
+                yield (pt_input, pt_tg, pt_mask, str), True
                 continue
 
-            l_seq = pt_batch.shape[0]
+            l_seq = pt_input.shape[0]
             for j in range(0, l_seq-chunk-1, chunk):
                 s = slice(j, j+chunk)
-                yield (pt_batch[s], pt_mask_batch[s], str_batch[s]), False
+                yield (pt_input[s], pt_tg[s], pt_mask[s], str[s]), False
             s = slice(j + chunk, None)
-            yield (pt_batch[s], pt_mask_batch[s], str_batch[s]), True
+            yield (pt_input[s], pt_tg[s], pt_mask[s], str[s]), True
 
     return generator
 
 
-def create_batch(slice, coord, coord_idx, strings, strings_idx, M=None):
+def extract_sequence(slice, coord, coord_idx, strings, strings_idx, M=None):
     """
     the slice represents the minibatch
     - coord: shape (number points, 3)
@@ -58,9 +63,8 @@ def create_batch(slice, coord, coord_idx, strings, strings_idx, M=None):
         each sequence
     """
     if not M:
-        M = 10000
+        M = 1500
 
-    # Two big sequenes
     pt_idxs = coord_idx[slice]
     str_idxs = strings_idx[slice]
 
