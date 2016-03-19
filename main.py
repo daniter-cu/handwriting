@@ -1,14 +1,19 @@
-import getpass
+import os
+import sys
 
 from lasagne.updates import adam
+import numpy as np
+import theano
+import theano.tensor as T
 
-from raccoon import *
+from raccoon.trainer import Trainer
+from raccoon.extensions import TrainMonitor
+from raccoon.archi.utils import clip_norm_gradients
 
 from data import create_generator, load_data, extract_sequence
-from model import Model1
+from model import UnconditionedModel
 from extensions import Sampler
 
-from matplotlib import pyplot as plt
 from utilities import plot_seq, plot_batch
 
 theano.config.floatX = 'float32'
@@ -17,12 +22,12 @@ floatX = theano.config.floatX
 np.random.seed(42)
 
 # CONFIG
-learning_rate = 0.05
+learning_rate = 0.1
 n_hidden = 900
 n_mixtures = 20
-gain = 0.1
-batch_size = 20
-chunk = 20
+gain = 0.01
+batch_size = 100
+chunk = 100
 every = 10000
 tmp_path = os.environ.get('TMP_PATH')
 dump_path = os.path.join(tmp_path, 'handwriting',
@@ -33,12 +38,14 @@ if not os.path.exists(dump_path):
 # DATA
 tr_coord_seq, tr_coord_idx, tr_strings_seq, tr_strings_idx = \
     load_data('hand_training.hdf5')
-
-
 # pt_batch, pt_mask_batch, str_batch = \
 #     extract_sequence(slice(0, 4),
 #                    tr_coord_seq, tr_coord_idx, tr_strings_seq, tr_strings_idx)
 # plot_batch(pt_batch, pt_mask_batch, use_mask=True, show=True)
+batch_gen = create_generator(
+        True, batch_size,
+        tr_coord_seq, tr_coord_idx,
+        tr_strings_seq, tr_strings_idx, chunk=chunk)
 
 
 # MODEL CREATION
@@ -47,33 +54,16 @@ seq_coord = T.tensor3('input', floatX)
 seq_tg = T.tensor3('tg', floatX)
 seq_mask = T.matrix('mask', floatX)
 h_ini = theano.shared(np.zeros((batch_size, n_hidden), floatX), 'hidden_state')
-# h_ini = T.matrix('hidden_state', floatX)
 
-model = Model1(gain, n_hidden, n_mixtures)
+model = UnconditionedModel(gain, n_hidden, n_mixtures)
 loss, updates, monitoring = model.apply(seq_coord, seq_mask, seq_tg, h_ini)
 loss.name = 'negll'
 
+
+# GRADIENT AND UPDATES
 params = model.params
 grads = T.grad(loss, params)
-
-
-# # Clip norm of the gradients
-# def clip_norm(g, c, n):
-#     if c > 0:
-#         g = T.switch(n >= c, g * c / n, g)
-#     return g
-# norm = T.sqrt(sum([T.sum(T.square(g)) for g in grads]))
-# grads = [clip_norm(g, 1, norm) for g in grads]
-
-
-def gradient_clipping(grads, rescale=5.):
-    grad_norm = tensor.sqrt(sum(map(lambda x: tensor.sqr(x).sum(), grads)))
-    scaling_num = rescale
-    scaling_den = tensor.maximum(rescale, grad_norm)
-    scaling = scaling_num / scaling_den
-    return [g * scaling for g in grads]
-
-grads = gradient_clipping(grads)
+grads = clip_norm_gradients(grads)
 
 # updates_params = adam(grads, params, 0.0003)
 
@@ -96,10 +86,6 @@ sampler = Sampler('sampler', every, dump_path, 'essai',
 
 train_m = Trainer(train_monitor, [sampler], [])
 
-batch_gen = create_generator(
-        True, batch_size,
-        tr_coord_seq, tr_coord_idx,
-        tr_strings_seq, tr_strings_idx, chunk=chunk)
 
 it = 0
 epoch = 0
@@ -108,9 +94,6 @@ try:
     while True:
         epoch += 1
         for (pt_in, pt_tg, pt_mask, str), next_seq in batch_gen():
-            # plt.figure(figsize=(3, 10))
-            # plot_seq(plt, pt_in[:, 0], pt_mask[:, 0], True)
-            # plt.show()
             res = train_m.process_batch(epoch, it,
                                         pt_in, pt_tg,
                                         pt_mask)

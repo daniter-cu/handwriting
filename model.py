@@ -31,7 +31,8 @@ class MixtureGaussians2D:
                  1)  # bernoulli
 
         self.w = shared(initializer.sample((n_in, n_out)), 'w_mixt')
-        self.b = shared(np.zeros((n_out,), floatX), 'b_mixt')
+        self.b = shared(np.random.normal(
+                0, 0.001, size=(n_out, )).astype(floatX), 'b_mixt')
 
         self.params = [self.w, self.b]
 
@@ -92,7 +93,7 @@ class MixtureGaussians2D:
         """
         h_seq = T.reshape(h_seq, (-1, h_seq.shape[-1]))
         tg_seq = T.reshape(tg_seq, (-1, tg_seq.shape[-1]))
-        mask_seq = T.reshape(mask_seq, (-1, mask_seq.shape[-1]))
+        mask_seq = T.reshape(mask_seq, (-1,))
 
         prop, mean_x, mean_y, std_x, std_y, rho, bernoulli = \
             self.compute_parameters(h_seq, self.w, self.b)
@@ -115,7 +116,7 @@ class MixtureGaussians2D:
              tg_pin * T.log(bernoulli) -
              (1-tg_pin) * T.log(1 - bernoulli))
 
-        c = c[mask_seq > 0]
+        c = T.sum(c * mask_seq) / T.sum(mask_seq)
 
         max_prop = T.argmax(prop, axis=1).mean()
         max_prop.name = 'max_prop'
@@ -135,10 +136,10 @@ class MixtureGaussians2D:
         m_y_m = mean_y.mean()
         m_y_m.name = 'mean_y'
 
-        return c.mean(), [m_x_m, m_y_m, s_x_m, s_y_m, max_prop, std_max_prop]
+        return c, [m_x_m, m_y_m, s_x_m, s_y_m, max_prop, std_max_prop]
 
 
-class Model1:
+class UnconditionedModel:
     def __init__(self, gain_ini, n_hidden, n_mixtures):
         ini = GlorotNormal(gain_ini)
         # ini = Orthogonal(gain_ini)
