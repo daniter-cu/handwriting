@@ -34,7 +34,8 @@ class MixtureGaussians2D:
         self.b = shared(np.random.normal(
                 0, 0.001, size=(n_out, )).astype(floatX), 'b_mixt')
 
-        self.params = [self.w, self.b]
+    def get_params(self):
+        return [self.w, self.b]
 
     def compute_parameters(self, h, w, b):
         """
@@ -148,9 +149,10 @@ class UnconditionedModel:
 
         self.mixture = MixtureGaussians2D(n_hidden, n_mixtures, ini)
 
-        self.params = self.gru_layer.params + self.mixture.params
-
         self.scan_updates = []
+
+    def get_params(self):
+        return self.gru_layer.get_params() + self.mixture.get_params()
 
     def apply(self, seq_coord, seq_mask, seq_tg, h_ini):
 
@@ -166,18 +168,11 @@ class UnconditionedModel:
     def prediction(self, coord_ini, h_ini, n_steps=500):
 
         def gru_step(coord_pre, h_pre,
-                     w, wr, wu, b, br, bu, u, ur, uu, w_mixt, b_mixt):
+                     w_in, b_in, w_rec, w_gates, w_mixt, b_mixt):
 
-            x_in = T.dot(coord_pre, w) + b
-            x_r = T.dot(coord_pre, wr) + br
-            x_u = T.dot(coord_pre, wu) + bu
-
-            r_gate = T.nnet.sigmoid(x_r + T.dot(h_pre, ur))
-            u_gate = T.nnet.sigmoid(x_u + T.dot(h_pre, uu))
-
-            h_new = T.tanh(x_in + T.dot(r_gate * h_pre, u))
-
-            h = (1-u_gate)*h_pre + u_gate*h_new
+            h = GRULayer.step(coord_pre, h_pre, w_rec, w_gates,
+                              mask=None, process_inputs=True,
+                              w_in=w_in, b_in=b_in)
 
             coord = self.mixture.prediction(h, w_mixt, b_mixt)
 
@@ -186,7 +181,7 @@ class UnconditionedModel:
         res, scan_updates = theano.scan(
                 fn=gru_step,
                 outputs_info=[coord_ini, h_ini],
-                non_sequences=self.params,  # les poids utilises
+                non_sequences=self.get_params(),  # les poids utilises
                 n_steps=n_steps,
                 strict=True)
 

@@ -23,12 +23,12 @@ np.random.seed(42)
 
 # CONFIG
 learning_rate = 0.1
-n_hidden = 900
+n_hidden = 400
 n_mixtures = 20
 gain = 0.01
 batch_size = 100
-chunk = 100
-every = 10000
+chunk = 20
+every = 1000
 tmp_path = os.environ.get('TMP_PATH')
 dump_path = os.path.join(tmp_path, 'handwriting',
                          str(np.random.randint(0, 100000000, 1)[0]))
