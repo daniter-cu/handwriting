@@ -75,8 +75,8 @@ updates_all = updates + updates_params
 
 coord_ini = T.matrix('coord', floatX)
 h_ini_pred = T.matrix('h_ini_pred', floatX)
-pred, updates_pred = model.prediction(coord_ini, h_ini_pred)
-f_sampling = theano.function([coord_ini, h_ini_pred], pred,
+gen_coord, gen_w, updates_pred = model.prediction(coord_ini, h_ini_pred)
+f_sampling = theano.function([coord_ini, h_ini_pred], [gen_coord, gen_w],
                              updates=updates_pred)
 
 # MONITORING

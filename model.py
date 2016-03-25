@@ -7,8 +7,7 @@ import numpy as np
 from lasagne.init import GlorotNormal, Orthogonal
 
 from raccoon.archi import GRULayer, PositionAttentionLayer
-
-from data import char2int
+from raccoon.archi.utils import create_uneven_weight
 
 theano.config.floatX = 'float32'
 floatX = theano.config.floatX
@@ -22,19 +21,24 @@ def logsumexp(x, axis=None):
 
 
 class MixtureGaussians2D:
-    def __init__(self, n_in, n_mixtures, initializer, eps=1e-5):
+    def __init__(self, ls_n_in, n_mixtures, initializer, eps=1e-5):
+        if not isinstance(ls_n_in, (tuple, list)):
+            ls_n_in = [ls_n_in]
+
+        self.n_in = sum(ls_n_in)
         self.n_mixtures = n_mixtures
         self.eps = eps
 
-        n_out = (n_mixtures +  # proportions
-                 n_mixtures * 2 +  # means
-                 n_mixtures * 2 +  # stds
-                 n_mixtures +  # correlations
-                 1)  # bernoulli
+        self.n_out = (n_mixtures +  # proportions
+                      n_mixtures * 2 +  # means
+                      n_mixtures * 2 +  # stds
+                      n_mixtures +  # correlations
+                      1)  # bernoulli
 
-        self.w = shared(initializer.sample((n_in, n_out)), 'w_mixt')
+        w_in_mat = create_uneven_weight(ls_n_in, self.n_out, initializer)
+        self.w = shared(w_in_mat, 'w_mixt')
         self.b = shared(np.random.normal(
-                0, 0.001, size=(n_out, )).astype(floatX), 'b_mixt')
+                0, 0.001, size=(self.n_out,)).astype(floatX), 'b_mixt')
 
         self.bias = shared(np.float32(.0))
 
@@ -190,11 +194,11 @@ class ConditionedModel:
         # ini = Orthogonal(gain_ini)
 
         self.pos_layer = PositionAttentionLayer(
-                GRULayer(3+self.dim_char, n_hidden, ini),
+                GRULayer([3, self.dim_char], n_hidden, ini),
                 self.dim_char,
                 self.n_mixt_attention, ini)
 
-        self.mixture = MixtureGaussians2D(n_hidden+self.dim_char,
+        self.mixture = MixtureGaussians2D([n_hidden, self.dim_char],
                                           n_mixtures, ini)
 
         self.params = self.pos_layer.params + self.mixture.params
@@ -293,5 +297,5 @@ class ConditionedModel:
                 non_sequences=[seq_str, seq_str_mask],
                 n_steps=n_steps)
 
-        return res[0], scan_updates
+        return res[0], res[1], scan_updates
 
