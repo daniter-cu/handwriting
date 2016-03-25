@@ -71,10 +71,10 @@ seq_str_mask.tag.test_value = np.ones((f_s_str, batch_size), dtype=floatX)
 
 model = ConditionedModel(gain, n_hidden, dim_char, n_mixt_attention,
                          n_gaussian_mixtures)
-h_ini, w_ini, k_ini, h2_ini = model.create_shared_init_states(batch_size)
+h_ini, w_ini, k_ini = model.create_shared_init_states(batch_size)
 loss, updates, monitoring = model.apply(seq_coord, seq_pt_mask, seq_tg,
                                         seq_str, seq_str_mask,
-                                        h_ini, w_ini, k_ini, h2_ini)
+                                        h_ini, w_ini, k_ini)
 loss.name = 'negll'
 
 
@@ -93,22 +93,21 @@ updates_all = updates + updates_params
 
 n_samples = len(sample_strings)
 coord_ini = T.matrix('coord_pred', floatX)
-h_ini_pred, w_ini_pred, k_ini_pred, h2_ini_pred = model.create_sym_init_states()
+h_ini_pred, w_ini_pred, k_ini_pred = model.create_sym_init_states()
 
 # Debug
 coord_ini.tag.test_value = np.zeros((n_samples, 3), floatX)
 h_ini_pred.tag.test_value = np.zeros((n_samples, n_hidden), floatX)
 w_ini_pred.tag.test_value = np.zeros((n_samples, dim_char), floatX)
 k_ini_pred.tag.test_value = np.zeros((n_samples, n_mixt_attention), floatX)
-h2_ini_pred.tag.test_value = np.zeros((n_samples, n_hidden), floatX)
 seq_str.tag.test_value = np.zeros((f_s_str, n_samples), dtype='int32')
 seq_str_mask.tag.test_value = np.ones((f_s_str, n_samples), dtype=floatX)
 
 pred, updates_pred = model.prediction(
         coord_ini, seq_str, seq_str_mask,
-        h_ini_pred, w_ini_pred, k_ini_pred, h2_ini_pred)
+        h_ini_pred, w_ini_pred, k_ini_pred)
 f_sampling = theano.function([coord_ini, seq_str, seq_str_mask,
-                              h_ini_pred, w_ini_pred, k_ini_pred, h2_ini_pred],
+                              h_ini_pred, w_ini_pred, k_ini_pred],
                              pred, updates=updates_pred)
 
 # MONITORING
@@ -122,7 +121,6 @@ sampler = SamplerCond('sampler', every, dump_path, 'essai',
                       np.zeros((n_samples, n_hidden), floatX),
                       np.zeros((n_samples, dim_char), floatX),
                       np.zeros((n_samples, n_mixt_attention), floatX),
-                      np.zeros((n_samples, n_hidden), floatX),
                       dict_char2int=char_dict, bias=model.mixture.bias,
                       bias_value=0.5)
 
@@ -131,7 +129,7 @@ train_m = Trainer(train_monitor, [sampler], [])
 
 it = 0
 epoch = 0
-model.reset_shared_init_states(h_ini, w_ini, k_ini, h2_ini, batch_size)
+model.reset_shared_init_states(h_ini, w_ini, k_ini, batch_size)
 try:
     while True:
         epoch += 1
@@ -140,8 +138,7 @@ try:
                                         pt_in, pt_tg,
                                         pt_mask, str, str_mask)
             if next_seq:
-                model.reset_shared_init_states(h_ini, w_ini, k_ini, h2_ini,
-                                               batch_size)
+                model.reset_shared_init_states(h_ini, w_ini, k_ini, batch_size)
             it += 1
             if res:
                 train_m.finish(it)

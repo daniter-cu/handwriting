@@ -194,9 +194,7 @@ class ConditionedModel:
                 self.dim_char,
                 self.n_mixt_attention, ini)
 
-        self.gru_layer = GRULayer(n_hidden+self.dim_char, n_hidden, ini)
-
-        self.mixture = MixtureGaussians2D(n_hidden,
+        self.mixture = MixtureGaussians2D(n_hidden+self.dim_char,
                                           n_mixtures, ini)
 
         self.params = self.pos_layer.params + self.mixture.params
@@ -209,11 +207,10 @@ class ConditionedModel:
         h_ini = create_shared((batch_size, self.n_hidden), 'h_ini')
         w_ini = create_shared((batch_size, self.dim_char), 'w_ini')
         k_ini = create_shared((batch_size, self.n_mixt_attention), 'k_ini')
-        h2_ini = create_shared((batch_size, self.n_hidden), 'h2_ini')
 
-        return h_ini, w_ini, k_ini, h2_ini
+        return h_ini, w_ini, k_ini
 
-    def reset_shared_init_states(self, h_ini, w_ini, k_ini, h2_ini, batch_size):
+    def reset_shared_init_states(self, h_ini, w_ini, k_ini, batch_size):
 
         def set_value(var, size):
             var.set_value(np.zeros(size, dtype=floatX))
@@ -221,17 +218,15 @@ class ConditionedModel:
         set_value(h_ini, (batch_size, self.n_hidden))
         set_value(w_ini, (batch_size, self.dim_char))
         set_value(k_ini, (batch_size, self.n_mixt_attention))
-        set_value(h2_ini, (batch_size, self.n_hidden))
 
     def create_sym_init_states(self):
         h_ini_pred = T.matrix('h_ini_pred', floatX)
         w_ini_pred = T.matrix('w_ini_pred', floatX)
         k_ini_pred = T.matrix('k_ini_pred', floatX)
-        h2_ini_pred = T.matrix('h2_ini_pred', floatX)
-        return h_ini_pred, w_ini_pred, k_ini_pred, h2_ini_pred
+        return h_ini_pred, w_ini_pred, k_ini_pred
 
     def apply(self, seq_coord, seq_mask, seq_tg, seq_str, seq_str_mask,
-              h_ini, w_ini, k_ini, h2_ini):
+              h_ini, w_ini, k_ini):
 
         # seq_str will have shape (seq_length, batch_size, dim_char]
         seq_str = T.eye(self.dim_char, dtype=floatX)[seq_str]
@@ -242,13 +237,9 @@ class ConditionedModel:
 
         seq_h_conc = T.concatenate([seq_h, seq_w], axis=-1)
 
-        seq_h2, scan_updates2 = self.gru_layer.apply(
-                seq_h_conc, seq_mask, h2_ini)
+        loss, monitoring = self.mixture.apply(seq_h_conc, seq_mask, seq_tg)
 
-        loss, monitoring = self.mixture.apply(seq_h2, seq_mask, seq_tg)
-
-        updates = [(h_ini, seq_h[-1]), (w_ini, seq_w[-1]), (k_ini, seq_k[-1]),
-                   (h2_ini, seq_h2[-1])]
+        updates = [(h_ini, seq_h[-1]), (w_ini, seq_w[-1]), (k_ini, seq_k[-1])]
 
         seq_h_mean = seq_h.mean()
         seq_h_mean.name = 'seq_h_mean'
@@ -278,31 +269,27 @@ class ConditionedModel:
                            argmax_seq_w_mean, argmax_seq_w_std,
                            max_seq_w_mean, max_seq_w_std])
 
-        return loss, updates + scan_updates + scan_updates2, monitoring
+        return loss, updates + scan_updates, monitoring
 
     def prediction(self, coord_ini, seq_str, seq_str_mask,
-                   h_ini, w_ini, k_ini, h2_ini, n_steps=500):
+                   h_ini, w_ini, k_ini, n_steps=500):
 
         seq_str = T.eye(self.dim_char, dtype=floatX)[seq_str]
 
-        def scan_step(coord_pre, h_pre, w_pre, k_pre, h2_pre,
-                      seq_str, seq_str_mask):
+        def scan_step(coord_pre, h_pre, w_pre, k_pre, seq_str, seq_str_mask):
 
             h, w, k = self.pos_layer.step(coord_pre, h_pre, w_pre, k_pre,
                                           seq_str, seq_str_mask, mask=None)
 
-            seq_h_conc = T.concatenate([h, w], axis=-1)
+            h_conc = T.concatenate([h, w], axis=-1)
 
-            h2 = self.gru_layer.step(seq_h_conc, h2_pre, mask=None,
-                                     process_inputs=True)
+            coord = self.mixture.prediction(h_conc)
 
-            coord = self.mixture.prediction(h2)
-
-            return coord, h, w, k, h2
+            return coord, h, w, k
 
         res, scan_updates = theano.scan(
                 fn=scan_step,
-                outputs_info=[coord_ini, h_ini, w_ini, k_ini, h2_ini],
+                outputs_info=[coord_ini, h_ini, w_ini, k_ini],
                 non_sequences=[seq_str, seq_str_mask],
                 n_steps=n_steps)
 

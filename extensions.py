@@ -45,7 +45,7 @@ class SamplerCond(Extension):
     """
     def __init__(self, name_extension, freq, folder_path, file_name,
                  fun_pred, sample_strings,
-                 coord_ini_mat, h_ini_mat, w_ini_mat, k_ini_mat, h2_ini_mat,
+                 coord_ini_mat, h_ini_mat, w_ini_mat, k_ini_mat,
                  dict_char2int, bias, bias_value=0.5, apply_at_the_start=True,
                  apply_at_the_end=True):
         super(SamplerCond, self).__init__(name_extension, freq,
@@ -60,7 +60,6 @@ class SamplerCond(Extension):
         self.h_ini_mat = h_ini_mat
         self.w_ini_mat = w_ini_mat
         self.k_ini_mat = k_ini_mat
-        self.h2_ini_mat = h2_ini_mat
         self.bias = bias
         self.bias_value = bias_value
 
@@ -73,7 +72,7 @@ class SamplerCond(Extension):
 
         sample = self.fun_pred(
                 self.coord_ini_mat, cond, cond_mask,
-                self.h_ini_mat, self.w_ini_mat, self.k_ini_mat, self.h2_ini_mat)
+                self.h_ini_mat, self.w_ini_mat, self.k_ini_mat)
 
         plot_batch(sample,
                    folder_path=self.folder_path,
