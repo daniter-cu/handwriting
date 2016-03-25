@@ -7,9 +7,10 @@ import re
 from xml.dom.minidom import parse
 import numpy as np
 import h5py
+import cPickle
 
 # Config
-dataset = 'validation'
+dataset = 'training'
 
 # mean and std used for standardization of the data
 M_x = 8.18586
@@ -21,6 +22,7 @@ data_folder = join(os.environ['DATA_PATH'], 'handwriting')
 strokes_filename = join(data_folder, dataset + '_set.txt')
 h5_filename = join(data_folder, 'handwriting_' + dataset + '.hdf5')
 
+char_dic, _ = cPickle.load(open('char_dict.pkl', 'r'))
 
 def get_target_string(stroke_filename):
 
@@ -67,8 +69,8 @@ def read_file(file_path):
 last_pt_idx = 0
 last_str_idx = 0
 for ii, l in enumerate(file(strokes_filename).readlines()):
-    if ii == 10:
-        break
+   #  if ii == 10:
+   #      break
     file_path = l.strip()
     file_path = join(data_folder, file_path)
 
@@ -81,7 +83,7 @@ for ii, l in enumerate(file(strokes_filename).readlines()):
 
     pts, str = res
     pt_seq.extend(pts)
-    str_seq.append(str)
+    str_seq.extend([char_dic.get(c, char_dic[' ']) for c in str])
 
     next_pt_idx = last_pt_idx + len(pts)
     pt_idx.append((last_pt_idx, next_pt_idx))
@@ -91,8 +93,7 @@ for ii, l in enumerate(file(strokes_filename).readlines()):
     str_idx.append((last_str_idx, next_str_idx))
     last_str_idx = next_str_idx
 
-str_seq = "".join(str_seq)
-str_seq = str_seq.encode("ascii", "ignore")
+str_seq = np.array(str_seq, dtype='int32')
 pt_seq = np.array(pt_seq, dtype='float32')
 
 print time.clock() - start
@@ -108,7 +109,7 @@ pt_seq[:, 0] = (pt_seq[:, 0] - M_x) / s_x
 pt_seq[:, 1] = (pt_seq[:, 1] - M_y) / s_y
 
 
-
+#
 from utilities import plot_batch
 from data import extract_sequence
 pt_batch, pt_mask_batch, str_batch = \
@@ -133,10 +134,20 @@ ds_points_length = f.create_dataset(
 ds_strings = f.create_dataset(
         "str_seq",
         (len(str_seq),),
-        dtype='S10',
-        data=list(str_seq))
+        dtype='int32',
+        data=str_seq)
 ds_strings_length = f.create_dataset(
         "str_idx",
         (len(str_idx), 2),
         dtype='int32',
         data=str_idx)
+
+# chars = np.unique(tr_strings_seq)
+# d = {}
+# for i, c in enumerate(chars):
+#     d[c] = np.int32(i)
+# d_inv = {}
+# for c, i in d.iteritems():
+#     d_inv[np.int32(i)] = c
+# import cPickle
+# cPickle.dump((d, d_inv), open('char_dict.pkl', 'w'))

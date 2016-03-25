@@ -17,7 +17,7 @@ from extensions import Sampler
 from utilities import plot_seq, plot_batch
 
 theano.config.floatX = 'float32'
-theano.config.optimizer = 'None'
+# theano.config.optimizer = 'None'
 floatX = theano.config.floatX
 np.random.seed(42)
 
@@ -74,15 +74,17 @@ for p, g in zip(params, grads):
 updates_all = updates + updates_params
 
 coord_ini = T.matrix('coord', floatX)
-pred, updates_pred = model.prediction(coord_ini, h_ini)
-f_sampling = theano.function([coord_ini], pred, updates=updates_pred)
+h_ini_pred = T.matrix('h_ini_pred', floatX)
+pred, updates_pred = model.prediction(coord_ini, h_ini_pred)
+f_sampling = theano.function([coord_ini, h_ini_pred], pred,
+                             updates=updates_pred)
 
 # MONITORING
 train_monitor = TrainMonitor(every, [seq_coord, seq_tg, seq_mask],
                              [loss] + monitoring, updates_all)
 
 sampler = Sampler('sampler', every, dump_path, 'essai',
-                  f_sampling, h_ini)
+                  f_sampling, n_hidden)
 
 train_m = Trainer(train_monitor, [sampler], [])
 
@@ -93,7 +95,7 @@ h_ini.set_value(np.zeros((batch_size, n_hidden), dtype=floatX))
 try:
     while True:
         epoch += 1
-        for (pt_in, pt_tg, pt_mask, str), next_seq in batch_gen():
+        for (pt_in, pt_tg, pt_mask, str, str_mask), next_seq in batch_gen():
             res = train_m.process_batch(epoch, it,
                                         pt_in, pt_tg,
                                         pt_mask)

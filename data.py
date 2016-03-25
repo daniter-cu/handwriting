@@ -33,7 +33,7 @@ def create_generator(shuffle, batch_size, seq_coord, coord_idx,
 
     def generator():
         for i in range(0, n_seq-batch_size, batch_size):
-            pt, pt_mask, str = \
+            pt, pt_mask, str, str_mask = \
                 extract_sequence(slice(i, i + batch_size),
                                  seq_coord, coord_idx, seq_strings, strings_idx)
 
@@ -42,20 +42,20 @@ def create_generator(shuffle, batch_size, seq_coord, coord_idx,
             pt_mask = pt_mask[1:]
 
             if not chunk:
-                yield (pt_input, pt_tg, pt_mask, str), True
+                yield (pt_input, pt_tg, pt_mask, str, str_mask), True
                 continue
 
             l_seq = pt_input.shape[0]
             for j in range(0, l_seq-chunk-1, chunk):
                 s = slice(j, j+chunk)
-                yield (pt_input[s], pt_tg[s], pt_mask[s], str[s]), False
+                yield (pt_input[s], pt_tg[s], pt_mask[s], str, str_mask), False
             s = slice(j + chunk, None)
-            yield (pt_input[s], pt_tg[s], pt_mask[s], str[s]), True
+            yield (pt_input[s], pt_tg[s], pt_mask[s], str, str_mask), True
 
     return generator
 
 
-def extract_sequence(slice, coord, coord_idx, strings, strings_idx, M=None):
+def extract_sequence(slice, coord, coord_idx, strings, str_idx, M=None):
     """
     the slice represents the minibatch
     - coord: shape (number points, 3)
@@ -66,24 +66,45 @@ def extract_sequence(slice, coord, coord_idx, strings, strings_idx, M=None):
         M = 1500
 
     pt_idxs = coord_idx[slice]
-    str_idxs = strings_idx[slice]
+    str_idxs = str_idx[slice]
 
     longuest_pt_seq = max([b - a for a, b in pt_idxs])
     longuest_pt_seq = min(M, longuest_pt_seq)
     pt_batch = np.zeros((longuest_pt_seq, len(pt_idxs), 3), dtype=floatX)
     pt_mask_batch = np.zeros((longuest_pt_seq, len(pt_idxs)), dtype=floatX)
 
-    str_batch = []
+    longuest_str_seq = max([b - a for a, b in str_idxs])
+    str_batch = np.zeros((longuest_str_seq, len(str_idxs)), dtype='int32')
+    str_mask_batch = np.zeros((longuest_str_seq, len(str_idxs)), dtype=floatX)
 
     for i, (pt_seq, str_seq) in enumerate(zip(pt_idxs, str_idxs)):
-        pts = np.array(coord[pt_seq[0]:pt_seq[1]])
+        pts = coord[pt_seq[0]:pt_seq[1]]
         limit2 = min(pts.shape[0], longuest_pt_seq)
         pt_batch[:limit2, i] = pts[:limit2]
         pt_mask_batch[:limit2, i] = 1
 
         strs = strings[str_seq[0]:str_seq[1]]
-        str_batch.append(strs)
+        limit2 = min(strs.shape[0], longuest_pt_seq)
+        str_batch[:limit2, i] = strs[:limit2]
+        str_mask_batch[:limit2, i] = 1
 
-    str_batch = np.array(str_batch)
+    return pt_batch, pt_mask_batch, str_batch, str_mask_batch
 
-    return pt_batch, pt_mask_batch, str_batch
+
+def char2int(ls_str, dict_char2int):
+
+    longuest_str = 0
+    for s in ls_str:
+        if len(s) > longuest_str:
+            longuest_str = len(s)
+
+    res = np.zeros((longuest_str, len(ls_str)), dtype='int32')
+    res_mask = np.zeros((longuest_str, len(ls_str)), dtype=floatX)
+
+    for i, s in enumerate(ls_str):
+        for j, c in enumerate(s):
+            res[j, i] = dict_char2int[ls_str[i][j]]
+            res_mask[j, i] = 1
+
+    return res, res_mask
+

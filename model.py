@@ -6,7 +6,9 @@ from theano.tensor.shared_randomstreams import RandomStreams
 import numpy as np
 from lasagne.init import GlorotNormal, Orthogonal
 
-from raccoon.archi import GRULayer
+from raccoon.archi import GRULayer, PositionAttentionLayer
+
+from data import char2int
 
 theano.config.floatX = 'float32'
 floatX = theano.config.floatX
@@ -34,20 +36,21 @@ class MixtureGaussians2D:
         self.b = shared(np.random.normal(
                 0, 0.001, size=(n_out, )).astype(floatX), 'b_mixt')
 
-    def get_params(self):
-        return [self.w, self.b]
+        self.bias = shared(np.float32(.0))
 
-    def compute_parameters(self, h, w, b):
+        self.params = [self.w, self.b]
+
+    def compute_parameters(self, h):
         """
         h: (batch or batch*seq, features)
         """
         n = self.n_mixtures
-        out = T.dot(h, w) + b
-        prop = T.nnet.softmax(out[:, :n])
+        out = T.dot(h, self.w) + self.b
+        prop = T.nnet.softmax(out[:, :n]*(1 + self.bias))
         mean_x = out[:, n:n*2]
         mean_y = out[:, n*2:n*3]
-        std_x = T.exp(out[:, n*3:n*4]) + self.eps
-        std_y = T.exp(out[:, n*4:n*5]) + self.eps
+        std_x = T.exp(out[:, n*3:n*4] - self.bias) + self.eps
+        std_y = T.exp(out[:, n*4:n*5] - self.bias) + self.eps
         rho = T.tanh(out[:, n*5:n*6])
         rho = (1+rho + self.eps) / (2 + 2*self.eps) - 1
         bernoulli = T.nnet.sigmoid(out[:, -1])
@@ -55,11 +58,11 @@ class MixtureGaussians2D:
 
         return prop, mean_x, mean_y, std_x, std_y, rho, bernoulli
 
-    def prediction(self, h, w, b):
+    def prediction(self, h):
         srng = RandomStreams(seed=42)
 
         prop, mean_x, mean_y, std_x, std_y, rho, bernoulli = \
-            self.compute_parameters(h, w, b)
+            self.compute_parameters(h)
 
         mode = T.argmax(srng.multinomial(pvals=prop, dtype=prop.dtype), axis=1)
 
@@ -97,7 +100,7 @@ class MixtureGaussians2D:
         mask_seq = T.reshape(mask_seq, (-1,))
 
         prop, mean_x, mean_y, std_x, std_y, rho, bernoulli = \
-            self.compute_parameters(h_seq, self.w, self.b)
+            self.compute_parameters(h_seq)
 
         tg_x = T.addbroadcast(tg_seq[:, 0:1], 1)
         tg_y = T.addbroadcast(tg_seq[:, 1:2], 1)
@@ -125,19 +128,7 @@ class MixtureGaussians2D:
         std_max_prop = T.argmax(prop, axis=1).std()
         std_max_prop.name = 'std_max_prop'
 
-        s_x_m = std_x.mean()
-        s_x_m.name = 'std_x'
-
-        s_y_m = std_y.mean()
-        s_y_m.name = 'std_y'
-
-        m_x_m = mean_x.mean()
-        m_x_m.name = 'mean_x'
-
-        m_y_m = mean_y.mean()
-        m_y_m.name = 'mean_y'
-
-        return c, [m_x_m, m_y_m, s_x_m, s_y_m, max_prop, std_max_prop]
+        return c, [max_prop, std_max_prop]
 
 
 class UnconditionedModel:
@@ -149,10 +140,7 @@ class UnconditionedModel:
 
         self.mixture = MixtureGaussians2D(n_hidden, n_mixtures, ini)
 
-        self.scan_updates = []
-
-    def get_params(self):
-        return self.gru_layer.get_params() + self.mixture.get_params()
+        self.params = self.gru_layer.params + self.mixture.params
 
     def apply(self, seq_coord, seq_mask, seq_tg, h_ini):
 
@@ -167,23 +155,156 @@ class UnconditionedModel:
 
     def prediction(self, coord_ini, h_ini, n_steps=500):
 
-        def gru_step(coord_pre, h_pre,
-                     w_in, b_in, w_rec, w_gates, w_mixt, b_mixt):
+        def gru_step(coord_pre, h_pre):
 
-            h = GRULayer.step(coord_pre, h_pre, w_rec, w_gates,
-                              mask=None, process_inputs=True,
-                              w_in=w_in, b_in=b_in)
+            h = self.gru_layer.step(coord_pre, h_pre,
+                                    mask=None, process_inputs=True)
 
-            coord = self.mixture.prediction(h, w_mixt, b_mixt)
+            coord = self.mixture.prediction(h)
 
             return coord, h
 
         res, scan_updates = theano.scan(
                 fn=gru_step,
                 outputs_info=[coord_ini, h_ini],
-                non_sequences=self.get_params(),  # les poids utilises
-                n_steps=n_steps,
-                strict=True)
+                n_steps=n_steps)
+
+        return res[0], scan_updates
+
+
+class ConditionedModel:
+    def __init__(self, gain_ini, n_hidden, dim_char, n_mixt_attention,
+                 n_mixtures):
+        """
+        Parameters
+        ----------
+        n_mixt_attention: int
+            Number of mixtures used
+        """
+        self.n_hidden = n_hidden
+        self.dim_char = dim_char
+        self.n_mixt_attention = n_mixt_attention
+        self.n_mixtures = n_mixtures
+
+        ini = GlorotNormal(gain_ini)
+        # ini = Orthogonal(gain_ini)
+
+        self.pos_layer = PositionAttentionLayer(
+                GRULayer(3+self.dim_char, n_hidden, ini),
+                self.dim_char,
+                self.n_mixt_attention, ini)
+
+        self.gru_layer = GRULayer(n_hidden+self.dim_char, n_hidden, ini)
+
+        self.mixture = MixtureGaussians2D(n_hidden,
+                                          n_mixtures, ini)
+
+        self.params = self.pos_layer.params + self.mixture.params
+
+    def create_shared_init_states(self, batch_size):
+
+        def create_shared(size, name):
+            return theano.shared(np.zeros(size, floatX), name)
+
+        h_ini = create_shared((batch_size, self.n_hidden), 'h_ini')
+        w_ini = create_shared((batch_size, self.dim_char), 'w_ini')
+        k_ini = create_shared((batch_size, self.n_mixt_attention), 'k_ini')
+        h2_ini = create_shared((batch_size, self.n_hidden), 'h2_ini')
+
+        return h_ini, w_ini, k_ini, h2_ini
+
+    def reset_shared_init_states(self, h_ini, w_ini, k_ini, h2_ini, batch_size):
+
+        def set_value(var, size):
+            var.set_value(np.zeros(size, dtype=floatX))
+
+        set_value(h_ini, (batch_size, self.n_hidden))
+        set_value(w_ini, (batch_size, self.dim_char))
+        set_value(k_ini, (batch_size, self.n_mixt_attention))
+        set_value(h2_ini, (batch_size, self.n_hidden))
+
+    def create_sym_init_states(self):
+        h_ini_pred = T.matrix('h_ini_pred', floatX)
+        w_ini_pred = T.matrix('w_ini_pred', floatX)
+        k_ini_pred = T.matrix('k_ini_pred', floatX)
+        h2_ini_pred = T.matrix('h2_ini_pred', floatX)
+        return h_ini_pred, w_ini_pred, k_ini_pred, h2_ini_pred
+
+    def apply(self, seq_coord, seq_mask, seq_tg, seq_str, seq_str_mask,
+              h_ini, w_ini, k_ini, h2_ini):
+
+        # seq_str will have shape (seq_length, batch_size, dim_char]
+        seq_str = T.eye(self.dim_char, dtype=floatX)[seq_str]
+
+        (seq_h, seq_w, seq_k), scan_updates = self.pos_layer.apply(
+                seq_coord, seq_mask, seq_str, seq_str_mask,
+                h_ini, w_ini, k_ini)
+
+        seq_h_conc = T.concatenate([seq_h, seq_w], axis=-1)
+
+        seq_h2, scan_updates2 = self.gru_layer.apply(
+                seq_h_conc, seq_mask, h2_ini)
+
+        loss, monitoring = self.mixture.apply(seq_h2, seq_mask, seq_tg)
+
+        updates = [(h_ini, seq_h[-1]), (w_ini, seq_w[-1]), (k_ini, seq_k[-1]),
+                   (h2_ini, seq_h2[-1])]
+
+        seq_h_mean = seq_h.mean()
+        seq_h_mean.name = 'seq_h_mean'
+
+        seq_w_mean = seq_w.mean()
+        seq_w_mean.name = 'seq_w_mean'
+
+        argmax_seq_w = T.argmax(seq_w, axis=-1)
+        argmax_seq_w_mean = argmax_seq_w.mean()
+        argmax_seq_w_mean.name = 'argmax_seq_w_mean'
+        argmax_seq_w_std = argmax_seq_w.std()
+        argmax_seq_w_std.name = 'argmax_seq_w_std'
+
+        max_seq_w = T.max(seq_w, axis=-1)
+        max_seq_w_mean = max_seq_w.mean()
+        max_seq_w_mean.name = 'max_seq_w_mean'
+        max_seq_w_std = max_seq_w.std()
+        max_seq_w_std.name = 'max_seq_w_std'
+
+        seq_k_mean = seq_k.mean()
+        seq_k_mean.name = 'seq_k_mean'
+
+        seq_k_std = seq_k.std()
+        seq_k_std.name = 'seq_k_std'
+
+        monitoring.extend([seq_h_mean, seq_w_mean, seq_k_mean, seq_k_std,
+                           argmax_seq_w_mean, argmax_seq_w_std,
+                           max_seq_w_mean, max_seq_w_std])
+
+        return loss, updates + scan_updates + scan_updates2, monitoring
+
+    def prediction(self, coord_ini, seq_str, seq_str_mask,
+                   h_ini, w_ini, k_ini, h2_ini, n_steps=500):
+
+        seq_str = T.eye(self.dim_char, dtype=floatX)[seq_str]
+
+        def scan_step(coord_pre, h_pre, w_pre, k_pre, h2_pre,
+                      seq_str, seq_str_mask):
+
+            h, w, k = self.pos_layer.step(coord_pre, h_pre, w_pre, k_pre,
+                                          seq_str, seq_str_mask, mask=None)
+
+            seq_h_conc = T.concatenate([h, w], axis=-1)
+
+            h2 = self.gru_layer.step(seq_h_conc, h2_pre, mask=None,
+                                     process_inputs=True)
+
+            coord = self.mixture.prediction(h2)
+
+            return coord, h, w, k, h2
+
+        res, scan_updates = theano.scan(
+                fn=scan_step,
+                outputs_info=[coord_ini, h_ini, w_ini, k_ini, h2_ini],
+                non_sequences=[seq_str, seq_str_mask],
+                n_steps=n_steps)
 
         return res[0], scan_updates
 
