@@ -91,24 +91,6 @@ updates_params = adam(grads, params, 0.0003)
 
 updates_all = updates + updates_params
 
-n_samples = len(sample_strings)
-coord_ini = T.matrix('coord_pred', floatX)
-h_ini_pred, w_ini_pred, k_ini_pred = model.create_sym_init_states()
-
-# Debug
-coord_ini.tag.test_value = np.zeros((n_samples, 3), floatX)
-h_ini_pred.tag.test_value = np.zeros((n_samples, n_hidden), floatX)
-w_ini_pred.tag.test_value = np.zeros((n_samples, dim_char), floatX)
-k_ini_pred.tag.test_value = np.zeros((n_samples, n_mixt_attention), floatX)
-seq_str.tag.test_value = np.zeros((f_s_str, n_samples), dtype='int32')
-seq_str_mask.tag.test_value = np.ones((f_s_str, n_samples), dtype=floatX)
-
-pred, updates_pred = model.prediction(
-        coord_ini, seq_str, seq_str_mask,
-        h_ini_pred, w_ini_pred, k_ini_pred)
-f_sampling = theano.function([coord_ini, seq_str, seq_str_mask,
-                              h_ini_pred, w_ini_pred, k_ini_pred],
-                             pred, updates=updates_pred)
 
 # MONITORING
 train_monitor = TrainMonitor(every, [seq_coord, seq_tg, seq_pt_mask,
@@ -116,13 +98,8 @@ train_monitor = TrainMonitor(every, [seq_coord, seq_tg, seq_pt_mask,
                              [loss] + monitoring, updates_all)
 
 sampler = SamplerCond('sampler', every, dump_path, 'essai',
-                      f_sampling, sample_strings,
-                      np.zeros((n_samples, 3), floatX),
-                      np.zeros((n_samples, n_hidden), floatX),
-                      np.zeros((n_samples, dim_char), floatX),
-                      np.zeros((n_samples, n_mixt_attention), floatX),
-                      dict_char2int=char_dict, bias=model.mixture.bias,
-                      bias_value=0.5)
+                      model, sample_strings, dict_char2int=char_dict,
+                      bias=model.mixture.bias, bias_value=0.5)
 
 train_m = Trainer(train_monitor, [sampler], [])
 

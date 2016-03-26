@@ -38,7 +38,7 @@ class MixtureGaussians2D:
         w_in_mat = create_uneven_weight(ls_n_in, self.n_out, initializer)
         self.w = shared(w_in_mat, 'w_mixt')
         self.b = shared(np.random.normal(
-                0, 0.001, size=(self.n_out,)).astype(floatX), 'b_mixt')
+            0, 0.001, size=(self.n_out,)).astype(floatX), 'b_mixt')
 
         self.bias = shared(np.float32(.0))
 
@@ -169,9 +169,9 @@ class UnconditionedModel:
             return coord, h
 
         res, scan_updates = theano.scan(
-                fn=gru_step,
-                outputs_info=[coord_ini, h_ini],
-                n_steps=n_steps)
+            fn=gru_step,
+            outputs_info=[coord_ini, h_ini],
+            n_steps=n_steps)
 
         return res[0], scan_updates
 
@@ -194,9 +194,9 @@ class ConditionedModel:
         # ini = Orthogonal(gain_ini)
 
         self.pos_layer = PositionAttentionLayer(
-                GRULayer([3, self.dim_char], n_hidden, ini),
-                self.dim_char,
-                self.n_mixt_attention, ini)
+            GRULayer([3, self.dim_char], n_hidden, ini),
+            self.dim_char,
+            self.n_mixt_attention, ini)
 
         self.mixture = MixtureGaussians2D([n_hidden, self.dim_char],
                                           n_mixtures, ini)
@@ -236,8 +236,8 @@ class ConditionedModel:
         seq_str = T.eye(self.dim_char, dtype=floatX)[seq_str]
 
         (seq_h, seq_w, seq_k), scan_updates = self.pos_layer.apply(
-                seq_coord, seq_mask, seq_str, seq_str_mask,
-                h_ini, w_ini, k_ini)
+            seq_coord, seq_mask, seq_str, seq_str_mask,
+            h_ini, w_ini, k_ini)
 
         seq_h_conc = T.concatenate([seq_h, seq_w], axis=-1)
 
@@ -245,57 +245,69 @@ class ConditionedModel:
 
         updates = [(h_ini, seq_h[-1]), (w_ini, seq_w[-1]), (k_ini, seq_k[-1])]
 
-        seq_h_mean = seq_h.mean()
+
+        seq_w = seq_w * seq_mask[:, :, None]
+        seq_k = seq_k * seq_mask[:, :, None]
+
+        n = seq_mask[:, :, None].sum()
+
+        seq_h_mean = T.sum(seq_h.mean(axis=-1)) / n
         seq_h_mean.name = 'seq_h_mean'
 
-        seq_w_mean = seq_w.mean()
+        seq_w_mean = T.sum(seq_w.mean(axis=-1)) / n
         seq_w_mean.name = 'seq_w_mean'
+
+        seq_k_mean = T.sum(seq_k.mean(axis=-1)) / n
+        seq_k_mean.name = 'seq_k_mean'
 
         argmax_seq_w = T.argmax(seq_w, axis=-1)
         argmax_seq_w_mean = argmax_seq_w.mean()
         argmax_seq_w_mean.name = 'argmax_seq_w_mean'
-        argmax_seq_w_std = argmax_seq_w.std()
-        argmax_seq_w_std.name = 'argmax_seq_w_std'
+        # argmax_seq_w_std = argmax_seq_w.std()
+        # argmax_seq_w_std.name = 'argmax_seq_w_std'
 
         max_seq_w = T.max(seq_w, axis=-1)
         max_seq_w_mean = max_seq_w.mean()
         max_seq_w_mean.name = 'max_seq_w_mean'
-        max_seq_w_std = max_seq_w.std()
-        max_seq_w_std.name = 'max_seq_w_std'
+        # max_seq_w_std = max_seq_w.std()
+        # max_seq_w_std.name = 'max_seq_w_std'
 
-        seq_k_mean = seq_k.mean()
-        seq_k_mean.name = 'seq_k_mean'
+        # seq_k_std = seq_k.std()
+        # seq_k_std.name = 'seq_k_std'
 
-        seq_k_std = seq_k.std()
-        seq_k_std.name = 'seq_k_std'
-
-        monitoring.extend([seq_h_mean, seq_w_mean, seq_k_mean, seq_k_std,
-                           argmax_seq_w_mean, argmax_seq_w_std,
-                           max_seq_w_mean, max_seq_w_std])
+        monitoring.extend([seq_h_mean, seq_w_mean, seq_k_mean,
+                           argmax_seq_w_mean,
+                           max_seq_w_mean])
 
         return loss, updates + scan_updates, monitoring
 
     def prediction(self, coord_ini, seq_str, seq_str_mask,
-                   h_ini, w_ini, k_ini, n_steps=500):
+                   h_ini, w_ini, k_ini, n_steps=5000):
 
         seq_str = T.eye(self.dim_char, dtype=floatX)[seq_str]
 
         def scan_step(coord_pre, h_pre, w_pre, k_pre, seq_str, seq_str_mask):
 
-            h, w, k = self.pos_layer.step(coord_pre, h_pre, w_pre, k_pre,
-                                          seq_str, seq_str_mask, mask=None)
+            h, w, p, k = self.pos_layer.step(coord_pre, h_pre, w_pre, k_pre,
+                                             seq_str, seq_str_mask, mask=None)
+
+            last_char = T.cast(T.sum(seq_str_mask, axis=0)-1, 'int32')
+            last_phi = p[last_char, T.arange(last_char.shape[0])]
+            max_phi = T.max(p, axis=0)
+
+            final_cond = last_phi >= max_phi
 
             h_conc = T.concatenate([h, w], axis=-1)
 
             coord = self.mixture.prediction(h_conc)
 
-            return coord, h, w, k
+            return (coord, h, w, k), theano.scan_module.until(T.all(final_cond))
 
         res, scan_updates = theano.scan(
-                fn=scan_step,
-                outputs_info=[coord_ini, h_ini, w_ini, k_ini],
-                non_sequences=[seq_str, seq_str_mask],
-                n_steps=n_steps)
+            fn=scan_step,
+            outputs_info=[coord_ini, h_ini, w_ini, k_ini],
+            non_sequences=[seq_str, seq_str_mask],
+            n_steps=n_steps)
 
         return res[0], res[1], scan_updates
 
