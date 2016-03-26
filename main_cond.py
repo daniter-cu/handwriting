@@ -15,8 +15,6 @@ from data import create_generator, load_data, extract_sequence
 from model import ConditionedModel
 from extensions import SamplerCond
 
-from utilities import plot_seq, plot_batch
-
 theano.config.floatX = 'float32'
 # theano.config.optimizer = 'None'
 # theano.config.compute_test_value = 'raise'
@@ -25,14 +23,14 @@ np.random.seed(42)
 
 # CONFIG
 learning_rate = 0.1
-n_hidden = 400
-dim_char = 81
+n_hidden = 600
+n_chars = 81
 n_mixt_attention = 10
 n_gaussian_mixtures = 20
 gain = 0.01
 batch_size = 50  # batch_size
 every = 100
-sample_strings = ['Hello world']*4
+sample_strings = ['Jose is a raccoon !']*4
 tmp_path = os.environ.get('TMP_PATH')
 dump_path = os.path.join(tmp_path, 'handwriting',
                          str(np.random.randint(0, 100000000, 1)[0]))
@@ -42,10 +40,6 @@ if not os.path.exists(dump_path):
 # DATA
 tr_coord_seq, tr_coord_idx, tr_strings_seq, tr_strings_idx = \
     load_data('hand_training.hdf5')
-# pt_batch, pt_mask_batch, str_batch = \
-#     extract_sequence(slice(0, 4),
-#                    tr_coord_seq, tr_coord_idx, tr_strings_seq, tr_strings_idx)
-# plot_batch(pt_batch, pt_mask_batch, use_mask=True, show=True)
 char_dict, inv_char_dict = cPickle.load(open('char_dict.pkl', 'r'))
 batch_gen = create_generator(
         True, batch_size,
@@ -68,8 +62,9 @@ seq_str.tag.test_value = np.zeros((f_s_str, batch_size), dtype='int32')
 seq_tg.tag.test_value = np.ones((f_s_pt, batch_size, 3), dtype=floatX)
 seq_pt_mask.tag.test_value = np.ones((f_s_pt, batch_size), dtype=floatX)
 seq_str_mask.tag.test_value = np.ones((f_s_str, batch_size), dtype=floatX)
+# End Debug
 
-model = ConditionedModel(gain, n_hidden, dim_char, n_mixt_attention,
+model = ConditionedModel(gain, n_hidden, n_chars, n_mixt_attention,
                          n_gaussian_mixtures)
 h_ini, w_ini, k_ini = model.create_shared_init_states(batch_size)
 loss, updates, monitoring = model.apply(seq_coord, seq_pt_mask, seq_tg,

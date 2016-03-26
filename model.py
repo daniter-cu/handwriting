@@ -177,63 +177,55 @@ class UnconditionedModel:
 
 
 class ConditionedModel:
-    def __init__(self, gain_ini, n_hidden, dim_char, n_mixt_attention,
+    def __init__(self, gain_ini, n_hidden, n_chars, n_mixt_attention,
                  n_mixtures):
         """
         Parameters
         ----------
         n_mixt_attention: int
-            Number of mixtures used
+            Number of mixtures used by the attention mechanism
+        n_chars: int
+            Number of different characters
+        n_mixtures: int
+            Number of mixtures in the Gaussian Mixture model
         """
         self.n_hidden = n_hidden
-        self.dim_char = dim_char
+        self.n_chars = n_chars
         self.n_mixt_attention = n_mixt_attention
         self.n_mixtures = n_mixtures
 
         ini = GlorotNormal(gain_ini)
-        # ini = Orthogonal(gain_ini)
 
         self.pos_layer = PositionAttentionLayer(
-            GRULayer([3, self.dim_char], n_hidden, ini),
-            self.dim_char,
+            GRULayer([3, self.n_chars], n_hidden, ini),
+            self.n_chars,
             self.n_mixt_attention, ini)
 
-        self.mixture = MixtureGaussians2D([n_hidden, self.dim_char],
+        self.mixture = MixtureGaussians2D([n_hidden, self.n_chars],
                                           n_mixtures, ini)
 
         self.params = self.pos_layer.params + self.mixture.params
 
-    def create_shared_init_states(self, batch_size):
-
-        def create_shared(size, name):
-            return theano.shared(np.zeros(size, floatX), name)
-
-        h_ini = create_shared((batch_size, self.n_hidden), 'h_ini')
-        w_ini = create_shared((batch_size, self.dim_char), 'w_ini')
-        k_ini = create_shared((batch_size, self.n_mixt_attention), 'k_ini')
-
-        return h_ini, w_ini, k_ini
-
-    def reset_shared_init_states(self, h_ini, w_ini, k_ini, batch_size):
-
-        def set_value(var, size):
-            var.set_value(np.zeros(size, dtype=floatX))
-
-        set_value(h_ini, (batch_size, self.n_hidden))
-        set_value(w_ini, (batch_size, self.dim_char))
-        set_value(k_ini, (batch_size, self.n_mixt_attention))
-
-    def create_sym_init_states(self):
-        h_ini_pred = T.matrix('h_ini_pred', floatX)
-        w_ini_pred = T.matrix('w_ini_pred', floatX)
-        k_ini_pred = T.matrix('k_ini_pred', floatX)
-        return h_ini_pred, w_ini_pred, k_ini_pred
-
     def apply(self, seq_coord, seq_mask, seq_tg, seq_str, seq_str_mask,
               h_ini, w_ini, k_ini):
+        """
+        Parameters
+        ----------
+        seq_coord: (length_pt_seq, batch_size, 3)
+        seq_mask: (length_pt_seq, batch_size)
+        seq_tg: (length_pt_seq, batch_size, 3)
+        seq_str: (length_str_seq, batch_size)
+            Each character is represented by an integer
+        seq_str_mask: (length_str_seq, batch_size)
 
-        # seq_str will have shape (seq_length, batch_size, dim_char]
-        seq_str = T.eye(self.dim_char, dtype=floatX)[seq_str]
+        h_ini: (batch_size, n_hidden)
+        w_ini: (batch_size, n_chars)
+        k_ini: (batch_size, n_mixture_attention)
+        """
+
+        # Convert the integers representing chars into one-hot encodings
+        # seq_str will have shape (seq_length, batch_size, n_chars)
+        seq_str = T.eye(self.n_chars, dtype=floatX)[seq_str]
 
         (seq_h, seq_w, seq_k), scan_updates = self.pos_layer.apply(
             seq_coord, seq_mask, seq_str, seq_str_mask,
@@ -245,8 +237,58 @@ class ConditionedModel:
 
         updates = [(h_ini, seq_h[-1]), (w_ini, seq_w[-1]), (k_ini, seq_k[-1])]
 
+        # Monitoring variables
+        monitoring.extend(
+            self.create_monitoring_variables(seq_h, seq_w, seq_k, seq_mask))
 
+        return loss, updates + scan_updates, monitoring
+
+    def prediction(self, coord_ini, seq_str, seq_str_mask,
+                   h_ini, w_ini, k_ini, n_steps=5000):
+        """
+        Parameters
+        ----------
+        coord_ini: (batch_size, 3)
+        seq_str: (length_str_seq, batch_size)
+        seq_str_mask: (length_str_seq, batch_size)
+
+        h_ini: (batch_size, n_hidden)
+        w_ini: (batch_size, n_chars)
+        k_ini: (batch_size, n_mixture_attention)
+        """
+
+        # Convert the integers representing chars into one-hot encodings
+        # seq_str will have shape (seq_length, batch_size, n_chars)
+        seq_str = T.eye(self.n_chars, dtype=floatX)[seq_str]
+
+        def scan_step(coord_pre, h_pre, w_pre, k_pre, seq_str, seq_str_mask):
+
+            h, w, p, k = self.pos_layer.step(coord_pre, h_pre, w_pre, k_pre,
+                                             seq_str, seq_str_mask, mask=None)
+
+            h_conc = T.concatenate([h, w], axis=-1)
+
+            coord = self.mixture.prediction(h_conc)
+
+            # ending condition
+            last_char = T.cast(T.sum(seq_str_mask, axis=0) - 1, 'int32')
+            last_phi = p[last_char, T.arange(last_char.shape[0])]
+            max_phi = T.max(p, axis=0)
+            final_cond = T.all(last_phi >= max_phi)
+
+            return (coord, h, w, k), theano.scan_module.until(final_cond)
+
+        res, scan_updates = theano.scan(
+            fn=scan_step,
+            outputs_info=[coord_ini, h_ini, w_ini, k_ini],
+            non_sequences=[seq_str, seq_str_mask],
+            n_steps=n_steps)
+
+        return res[0], res[1], scan_updates
+
+    def create_monitoring_variables(self, seq_h, seq_w, seq_k, seq_mask):
         seq_w = seq_w * seq_mask[:, :, None]
+
         seq_k = seq_k * seq_mask[:, :, None]
 
         n = seq_mask[:, :, None].sum()
@@ -260,54 +302,28 @@ class ConditionedModel:
         seq_k_mean = T.sum(seq_k.mean(axis=-1)) / n
         seq_k_mean.name = 'seq_k_mean'
 
-        argmax_seq_w = T.argmax(seq_w, axis=-1)
-        argmax_seq_w_mean = argmax_seq_w.mean()
-        argmax_seq_w_mean.name = 'argmax_seq_w_mean'
-        # argmax_seq_w_std = argmax_seq_w.std()
-        # argmax_seq_w_std.name = 'argmax_seq_w_std'
+        return [seq_h_mean, seq_w_mean, seq_k_mean]
 
-        max_seq_w = T.max(seq_w, axis=-1)
-        max_seq_w_mean = max_seq_w.mean()
-        max_seq_w_mean.name = 'max_seq_w_mean'
-        # max_seq_w_std = max_seq_w.std()
-        # max_seq_w_std.name = 'max_seq_w_std'
+    def create_shared_init_states(self, batch_size):
+        def create_shared(size, name):
+            return theano.shared(np.zeros(size, floatX), name)
 
-        # seq_k_std = seq_k.std()
-        # seq_k_std.name = 'seq_k_std'
+        h_ini = create_shared((batch_size, self.n_hidden), 'h_ini')
+        w_ini = create_shared((batch_size, self.n_chars), 'w_ini')
+        k_ini = create_shared((batch_size, self.n_mixt_attention), 'k_ini')
 
-        monitoring.extend([seq_h_mean, seq_w_mean, seq_k_mean,
-                           argmax_seq_w_mean,
-                           max_seq_w_mean])
+        return h_ini, w_ini, k_ini
 
-        return loss, updates + scan_updates, monitoring
+    def reset_shared_init_states(self, h_ini, w_ini, k_ini, batch_size):
+        def set_value(var, size):
+            var.set_value(np.zeros(size, dtype=floatX))
 
-    def prediction(self, coord_ini, seq_str, seq_str_mask,
-                   h_ini, w_ini, k_ini, n_steps=5000):
+        set_value(h_ini, (batch_size, self.n_hidden))
+        set_value(w_ini, (batch_size, self.n_chars))
+        set_value(k_ini, (batch_size, self.n_mixt_attention))
 
-        seq_str = T.eye(self.dim_char, dtype=floatX)[seq_str]
-
-        def scan_step(coord_pre, h_pre, w_pre, k_pre, seq_str, seq_str_mask):
-
-            h, w, p, k = self.pos_layer.step(coord_pre, h_pre, w_pre, k_pre,
-                                             seq_str, seq_str_mask, mask=None)
-
-            last_char = T.cast(T.sum(seq_str_mask, axis=0)-1, 'int32')
-            last_phi = p[last_char, T.arange(last_char.shape[0])]
-            max_phi = T.max(p, axis=0)
-
-            final_cond = last_phi >= max_phi
-
-            h_conc = T.concatenate([h, w], axis=-1)
-
-            coord = self.mixture.prediction(h_conc)
-
-            return (coord, h, w, k), theano.scan_module.until(T.all(final_cond))
-
-        res, scan_updates = theano.scan(
-            fn=scan_step,
-            outputs_info=[coord_ini, h_ini, w_ini, k_ini],
-            non_sequences=[seq_str, seq_str_mask],
-            n_steps=n_steps)
-
-        return res[0], res[1], scan_updates
-
+    def create_sym_init_states(self):
+        h_ini_pred = T.matrix('h_ini_pred', floatX)
+        w_ini_pred = T.matrix('w_ini_pred', floatX)
+        k_ini_pred = T.matrix('k_ini_pred', floatX)
+        return h_ini_pred, w_ini_pred, k_ini_pred
