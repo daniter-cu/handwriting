@@ -43,7 +43,7 @@ if __name__ == '__main__':
     print 'done.'
 
     n = options.n_times
-    sample_string = [options.sample_string + ' ']
+    sample_string = [options.sample_string + ' '] * n
 
     cond, cond_mask = char2int(sample_string, dict_char2int)
 

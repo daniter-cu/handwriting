@@ -98,13 +98,14 @@ class SamplingFunctionSaver(Saver):
         self.dict_char2int = dict_char2int
 
     def condition(self, batch_id):
-        if not self.val_monitor.history:
-            return False
-        current_value = self.val_monitor.history[-1][self.var_idx]
-        if current_value < self.best_value:
-            self.best_value = current_value
-            return True
-        return False
+        return True
+        # if not self.val_monitor.history:
+        #     return False
+        # current_value = self.val_monitor.history[-1][self.var_idx]
+        # if current_value < self.best_value:
+        #     self.best_value = current_value
+        #     return True
+        # return False
 
     def compute_object(self):
         return (self.model, self.f_sampling, self.dict_char2int), \
@@ -122,7 +123,7 @@ class ValMonitorHandwriting(ValMonitor):
     def __init__(self, name_extension, freq, inputs, monitored_variables,
                  stream, model, h_ini, w_ini, k_ini, batch_size, **kwargs):
         ValMonitor.__init__(self, name_extension, freq, inputs,
-                            monitored_variables, **kwargs)
+                            monitored_variables, stream, **kwargs)
         self.stream = stream
         self.model = model
 
