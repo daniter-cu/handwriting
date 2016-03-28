@@ -5,7 +5,7 @@ import theano.tensor as T
 import numpy as np
 
 from raccoon import Extension
-from raccoon.extensions import Saver
+from raccoon.extensions import Saver, ValMonitor
 
 from data import char2int
 from utilities import plot_batch
@@ -112,3 +112,46 @@ class SamplingFunctionSaver(Saver):
 
     def finish(self, bath_id):
         return -1, ['not executed at the end']
+
+
+class ValMonitorHandwriting(ValMonitor):
+    """
+    Extension to monitor tensor variables and MonitoredQuantity objects on an
+    external fuel stream.
+    """
+    def __init__(self, name_extension, freq, inputs, monitored_variables,
+                 stream, model, h_ini, w_ini, k_ini, batch_size, **kwargs):
+        ValMonitor.__init__(self, name_extension, freq, inputs,
+                            monitored_variables, **kwargs)
+        self.stream = stream
+        self.model = model
+
+        self.h_ini = h_ini
+        self.w_ini = w_ini
+        self.k_ini = k_ini
+        self.var = [h_ini, w_ini, k_ini]
+        self.batch_size = batch_size
+
+    def compute_current_values(self):
+
+        # Save current state
+        previous_states = [v.get_value() for v in self.var]
+
+        self.model.reset_shared_init_states(
+            self.h_ini, self.w_ini, self.k_ini, self.batch_size)
+
+        c = 0.0
+        for inputs, signal in self.stream():
+            self.inc_values(*inputs)
+            c += 1
+
+            if signal:
+                self.model.reset_shared_init_states(
+                    self.h_ini, self.w_ini, self.k_ini, self.batch_size)
+
+        # restore states
+        for s, v in zip(previous_states, self.var):
+            v.set_value(s)
+
+        for i, agg_fun in enumerate(self.agg_fun):
+            self.current_values[i] = agg_fun(self.current_values[i], c)
