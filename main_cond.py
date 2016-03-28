@@ -133,7 +133,7 @@ try:
     while True:
         epoch += 1
         for inputs, next_seq in train_batch_gen():
-            res = train_m.process_batch(epoch, *inputs)
+            res = train_m.process_batch(epoch, it, *inputs)
 
             if next_seq:
                 model.reset_shared_init_states(h_ini, w_ini, k_ini, batch_size)
