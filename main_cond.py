@@ -31,8 +31,8 @@ n_gaussian_mixtures = 20
 gain = 0.01
 batch_size = 50  # batch_size
 chunk = 20
-every = 100
-every_val = 1000
+every = 2000
+every_val = 20000
 sample_strings = ['Jose is a raccoon !']*4
 tmp_path = os.environ.get('TMP_PATH')
 dump_path = os.path.join(tmp_path, 'handwriting',
@@ -53,7 +53,7 @@ val_coord_seq, val_coord_idx, val_strings_seq, val_strings_idx = \
 valid_batch_gen = create_generator(
     True, batch_size,
     val_coord_seq, val_coord_idx,
-    val_strings_seq, val_strings_idx, chunk=chunk)
+    val_strings_seq, val_strings_idx, chunk=None)
 
 # MODEL CREATION
 # shape (seq, element_id, features)
@@ -126,8 +126,7 @@ sampling_saver = SamplingFunctionSaver(
 train_m = Trainer(train_monitor, [valid_monitor, sampler, sampling_saver], [])
 
 
-it = 0
-epoch = 0
+it = epoch = 0
 model.reset_shared_init_states(h_ini, w_ini, k_ini, batch_size)
 try:
     while True:
