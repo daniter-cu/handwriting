@@ -40,21 +40,19 @@ class MixtureGaussians2D:
         self.b = shared(np.random.normal(
             0, 0.001, size=(self.n_out,)).astype(floatX), 'b_mixt')
 
-        self.bias = shared(np.float32(.0))
-
         self.params = [self.w, self.b]
 
-    def compute_parameters(self, h):
+    def compute_parameters(self, h, bias):
         """
         h: (batch or batch*seq, features)
         """
         n = self.n_mixtures
         out = T.dot(h, self.w) + self.b
-        prop = T.nnet.softmax(out[:, :n]*(1 + self.bias))
+        prop = T.nnet.softmax(out[:, :n]*(1 + bias))
         mean_x = out[:, n:n*2]
         mean_y = out[:, n*2:n*3]
-        std_x = T.exp(out[:, n*3:n*4] - self.bias) + self.eps
-        std_y = T.exp(out[:, n*4:n*5] - self.bias) + self.eps
+        std_x = T.exp(out[:, n*3:n*4] - bias) + self.eps
+        std_y = T.exp(out[:, n*4:n*5] - bias) + self.eps
         rho = T.tanh(out[:, n*5:n*6])
         rho = (1+rho + self.eps) / (2 + 2*self.eps) - 1
         bernoulli = T.nnet.sigmoid(out[:, -1])
@@ -62,11 +60,11 @@ class MixtureGaussians2D:
 
         return prop, mean_x, mean_y, std_x, std_y, rho, bernoulli
 
-    def prediction(self, h):
+    def prediction(self, h, bias):
         srng = RandomStreams(seed=42)
 
         prop, mean_x, mean_y, std_x, std_y, rho, bernoulli = \
-            self.compute_parameters(h)
+            self.compute_parameters(h, bias)
 
         mode = T.argmax(srng.multinomial(pvals=prop, dtype=prop.dtype), axis=1)
 
@@ -104,7 +102,7 @@ class MixtureGaussians2D:
         mask_seq = T.reshape(mask_seq, (-1,))
 
         prop, mean_x, mean_y, std_x, std_y, rho, bernoulli = \
-            self.compute_parameters(h_seq)
+            self.compute_parameters(h_seq, .0)
 
         tg_x = T.addbroadcast(tg_seq[:, 0:1], 1)
         tg_y = T.addbroadcast(tg_seq[:, 1:2], 1)
@@ -244,7 +242,7 @@ class ConditionedModel:
         return loss, updates + scan_updates, monitoring
 
     def prediction(self, coord_ini, seq_str, seq_str_mask,
-                   h_ini, w_ini, k_ini, n_steps=5000):
+                   h_ini, w_ini, k_ini, bias=.0, n_steps=10000):
         """
         Parameters
         ----------
@@ -260,28 +258,33 @@ class ConditionedModel:
         # Convert the integers representing chars into one-hot encodings
         # seq_str will have shape (seq_length, batch_size, n_chars)
         seq_str = T.eye(self.n_chars, dtype=floatX)[seq_str]
+        batch_size = coord_ini.shape[0]
 
-        def scan_step(coord_pre, h_pre, w_pre, k_pre, seq_str, seq_str_mask):
+        def scan_step(coord_pre, h_pre, w_pre, k_pre, final_cond,
+                      seq_str, seq_str_mask, bias):
 
             h, w, p, k = self.pos_layer.step(coord_pre, h_pre, w_pre, k_pre,
                                              seq_str, seq_str_mask, mask=None)
 
             h_conc = T.concatenate([h, w], axis=-1)
 
-            coord = self.mixture.prediction(h_conc)
+            coord = self.mixture.prediction(h_conc, bias)
 
             # ending condition
-            last_char = T.cast(T.sum(seq_str_mask, axis=0) - 1, 'int32')
+            last_char = T.cast(T.sum(seq_str_mask, axis=0)-1, 'int32')
             last_phi = p[last_char, T.arange(last_char.shape[0])]
             max_phi = T.max(p, axis=0)
-            final_cond = T.all(last_phi >= max_phi)
+            condition = last_phi >= 0.95*max_phi
+            final_cond = T.switch(condition, 1.0, final_cond)
 
-            return (coord, h, w, k), theano.scan_module.until(final_cond)
+            return ((coord, h, w, k, final_cond),
+                    theano.scan_module.until(T.all(final_cond)))
 
         res, scan_updates = theano.scan(
             fn=scan_step,
-            outputs_info=[coord_ini, h_ini, w_ini, k_ini],
-            non_sequences=[seq_str, seq_str_mask],
+            outputs_info=[coord_ini, h_ini, w_ini, k_ini,
+                          T.alloc(0., batch_size)],
+            non_sequences=[seq_str, seq_str_mask, bias],
             n_steps=n_steps)
 
         return res[0], res[1], scan_updates
@@ -323,7 +326,9 @@ class ConditionedModel:
         set_value(k_ini, (batch_size, self.n_mixt_attention))
 
     def create_sym_init_states(self):
+        coord_ini = T.matrix('coord_pred', floatX)
         h_ini_pred = T.matrix('h_ini_pred', floatX)
         w_ini_pred = T.matrix('w_ini_pred', floatX)
         k_ini_pred = T.matrix('k_ini_pred', floatX)
-        return h_ini_pred, w_ini_pred, k_ini_pred
+        bias = T.scalar('bias_generation_pred', floatX)
+        return coord_ini, h_ini_pred, w_ini_pred, k_ini_pred, bias

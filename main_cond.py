@@ -8,12 +8,13 @@ import theano
 import theano.tensor as T
 
 from raccoon.trainer import Trainer
-from raccoon.extensions import TrainMonitor
+from raccoon.extensions import TrainMonitor, ValMonitor
 from raccoon.archi.utils import clip_norm_gradients
 
 from data import create_generator, load_data, extract_sequence
 from model import ConditionedModel
-from extensions import SamplerCond
+from extensions import SamplerCond, SamplingFunctionSaver
+from utilities import create_train_tag_values, create_gen_tag_values
 
 theano.config.floatX = 'float32'
 # theano.config.optimizer = 'None'
@@ -30,6 +31,7 @@ n_gaussian_mixtures = 20
 gain = 0.01
 batch_size = 50  # batch_size
 every = 100
+every_val = 1000
 sample_strings = ['Jose is a raccoon !']*4
 tmp_path = os.environ.get('TMP_PATH')
 dump_path = os.path.join(tmp_path, 'handwriting',
@@ -41,10 +43,16 @@ if not os.path.exists(dump_path):
 tr_coord_seq, tr_coord_idx, tr_strings_seq, tr_strings_idx = \
     load_data('hand_training.hdf5')
 char_dict, inv_char_dict = cPickle.load(open('char_dict.pkl', 'r'))
-batch_gen = create_generator(
+train_batch_gen = create_generator(
         True, batch_size,
         tr_coord_seq, tr_coord_idx,
         tr_strings_seq, tr_strings_idx, chunk=None)
+val_coord_seq, val_coord_idx, val_strings_seq, val_strings_idx = \
+    load_data('hand_training.hdf5')
+valid_batch_gen = create_generator(
+    True, batch_size,
+    val_coord_seq, val_coord_idx,
+    val_strings_seq, val_strings_idx, chunk=None)
 
 # MODEL CREATION
 # shape (seq, element_id, features)
@@ -53,16 +61,9 @@ seq_str = T.matrix('str_input', 'int32')
 seq_tg = T.tensor3('tg', floatX)
 seq_pt_mask = T.matrix('pt_mask', floatX)
 seq_str_mask = T.matrix('str_mask', floatX)
+create_train_tag_values(seq_coord, seq_str, seq_tg, seq_pt_mask,
+                        seq_str_mask, batch_size)  # for debug
 
-# Debug
-f_s_pt = 6
-f_s_str = 7
-seq_coord.tag.test_value = np.zeros((f_s_pt, batch_size, 3), dtype=floatX)
-seq_str.tag.test_value = np.zeros((f_s_str, batch_size), dtype='int32')
-seq_tg.tag.test_value = np.ones((f_s_pt, batch_size, 3), dtype=floatX)
-seq_pt_mask.tag.test_value = np.ones((f_s_pt, batch_size), dtype=floatX)
-seq_str_mask.tag.test_value = np.ones((f_s_str, batch_size), dtype=floatX)
-# End Debug
 
 model = ConditionedModel(gain, n_hidden, n_chars, n_mixt_attention,
                          n_gaussian_mixtures)
@@ -87,16 +88,40 @@ updates_params = adam(grads, params, 0.0003)
 updates_all = updates + updates_params
 
 
+# SAMPLING FUNCTION
+coord_ini, h_ini_pred, w_ini_pred, k_ini_pred, bias = \
+    model.create_sym_init_states()
+create_gen_tag_values(model, coord_ini, h_ini_pred, w_ini_pred, k_ini_pred,
+                      seq_str, seq_str_mask)  # for debug
+
+coord_gen, w_gen, updates_pred = model.prediction(
+    coord_ini, seq_str, seq_str_mask,
+    h_ini_pred, w_ini_pred, k_ini_pred, bias=bias)
+
+f_sampling = theano.function(
+    [coord_ini, seq_str, seq_str_mask, h_ini_pred, w_ini_pred, k_ini_pred,
+     bias], [coord_gen, w_gen], updates=updates_pred)
+
+
 # MONITORING
-train_monitor = TrainMonitor(every, [seq_coord, seq_tg, seq_pt_mask,
-                                     seq_str, seq_str_mask],
-                             [loss] + monitoring, updates_all)
+train_monitor = TrainMonitor(
+    every, [seq_coord, seq_tg, seq_pt_mask, seq_str, seq_str_mask],
+    [loss] + monitoring, updates_all)
+
+valid_monitor = ValMonitor(
+    'Validation', every_val, [seq_coord, seq_tg, seq_pt_mask, seq_str,
+                              seq_str_mask], [loss] + monitoring,
+    valid_batch_gen, apply_at_the_start=False)
 
 sampler = SamplerCond('sampler', every, dump_path, 'essai',
-                      model, sample_strings, dict_char2int=char_dict,
-                      bias=model.mixture.bias, bias_value=0.5)
+                      model, f_sampling, sample_strings,
+                      dict_char2int=char_dict, bias_value=0.5)
 
-train_m = Trainer(train_monitor, [sampler], [])
+sampling_saver = SamplingFunctionSaver(
+    valid_monitor, loss, every_val, dump_path, 'f_sampling', model,
+    f_sampling, char_dict, apply_at_the_start=True)
+
+train_m = Trainer(train_monitor, [valid_monitor, sampler, sampling_saver], [])
 
 
 it = 0
@@ -105,7 +130,7 @@ model.reset_shared_init_states(h_ini, w_ini, k_ini, batch_size)
 try:
     while True:
         epoch += 1
-        for (pt_in, pt_tg, pt_mask, str, str_mask), next_seq in batch_gen():
+        for (pt_in, pt_tg, pt_mask, str, str_mask), next_seq in train_batch_gen():
             res = train_m.process_batch(epoch, it,
                                         pt_in, pt_tg,
                                         pt_mask, str, str_mask)

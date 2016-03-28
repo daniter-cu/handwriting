@@ -5,6 +5,7 @@ import theano.tensor as T
 import numpy as np
 
 from raccoon import Extension
+from raccoon.extensions import Saver
 
 from data import char2int
 from utilities import plot_batch
@@ -45,7 +46,8 @@ class SamplerCond(Extension):
     Only the compute_object method should be overwritten.
     """
     def __init__(self, name_extension, freq, folder_path, file_name,
-                 model, sample_strings, dict_char2int, bias, bias_value=0.5,
+                 model, f_sampling, sample_strings, dict_char2int,
+                 bias_value=0.5,
                  apply_at_the_start=True, apply_at_the_end=True):
         super(SamplerCond, self).__init__(name_extension, freq,
                                           apply_at_the_end=apply_at_the_end,
@@ -53,62 +55,60 @@ class SamplerCond(Extension):
         self.folder_path = folder_path
         self.file_name = file_name
 
-        self.sample_strings = sample_strings
+        self.sample_strings = [s + ' ' for s in sample_strings]
         n_samples = len(sample_strings)
         self.dict_char2int = dict_char2int
-
-        self.bias = bias
+        self.f_sampling = f_sampling
         self.bias_value = bias_value
-
-        # Symbolic variables
-        seq_str = T.matrix('str_input', 'int32')
-        seq_str_mask = T.matrix('str_mask', floatX)
-        coord_ini = T.matrix('coord_pred', floatX)
-        h_ini_pred, w_ini_pred, k_ini_pred = model.create_sym_init_states()
-
-        # Debug test values
-        f_s_str = 7
-        n_hidden, dim_char = model.n_hidden, model.dim_char
-        n_mixt_attention = model.n_mixt_attention
-        coord_ini.tag.test_value = np.zeros((n_samples, 3), floatX)
-        h_ini_pred.tag.test_value = np.zeros((n_samples, n_hidden), floatX)
-        w_ini_pred.tag.test_value = np.zeros((n_samples, dim_char), floatX)
-        k_ini_pred.tag.test_value = np.zeros((n_samples, n_mixt_attention), floatX)
-        seq_str.tag.test_value = np.zeros((f_s_str, n_samples), dtype='int32')
-        seq_str_mask.tag.test_value = np.ones((f_s_str, n_samples), dtype=floatX)
-
-        # Create graph
-        coord_gen, w_gen, updates_pred = model.prediction(
-                coord_ini, seq_str, seq_str_mask,
-                h_ini_pred, w_ini_pred, k_ini_pred)
-
-        # Compile function
-        self.f_sampling = theano.function([coord_ini, seq_str, seq_str_mask,
-                                           h_ini_pred, w_ini_pred, k_ini_pred],
-                                          [coord_gen, w_gen],
-                                          updates=updates_pred)
 
         # Initial values
         self.coord_ini_mat = np.zeros((n_samples, 3), floatX)
-        self.h_ini_mat = np.zeros((n_samples, n_hidden), floatX)
-        self.w_ini_mat = np.zeros((n_samples, dim_char), floatX)
-        self.k_ini_mat = np.zeros((n_samples, n_mixt_attention), floatX)
+        self.h_ini_mat = np.zeros((n_samples, model.n_hidden), floatX)
+        self.w_ini_mat = np.zeros((n_samples, model.n_chars), floatX)
+        self.k_ini_mat = np.zeros((n_samples, model.n_mixt_attention), floatX)
 
     def execute_virtual(self, batch_id):
-
-        bias_val_pre = self.bias.get_value()
-        self.bias.set_value(self.bias_value)
 
         cond, cond_mask = char2int(self.sample_strings, self.dict_char2int)
 
         sample, w_gen = self.f_sampling(
                 self.coord_ini_mat, cond, cond_mask,
-                self.h_ini_mat, self.w_ini_mat, self.k_ini_mat)
+                self.h_ini_mat, self.w_ini_mat, self.k_ini_mat, self.bias_value)
 
         plot_batch(sample,
                    folder_path=self.folder_path,
                    file_name='{}_'.format(batch_id) + self.file_name)
 
-        self.bias.set_value(bias_val_pre)
-
         return ['executed']
+
+
+class SamplingFunctionSaver(Saver):
+    def __init__(self, monitor, var, freq, folder_path, file_name,
+                 model, f_sampling, dict_char2int, **kwargs):
+        Saver.__init__(self, 'Sampling function saver', freq, folder_path,
+                       file_name, apply_at_the_end=False, **kwargs)
+
+        self.val_monitor = monitor
+        # Index of the variable to check in the monitoring extension
+        self.var_idx = monitor.output_links[var][0]
+        self.best_value = np.inf
+
+        self.model = model
+        self.f_sampling = f_sampling
+        self.dict_char2int = dict_char2int
+
+    def condition(self, batch_id):
+        if not self.val_monitor.history:
+            return False
+        current_value = self.val_monitor.history[-1][self.var_idx]
+        if current_value < self.best_value:
+            self.best_value = current_value
+            return True
+        return False
+
+    def compute_object(self):
+        return (self.model, self.f_sampling, self.dict_char2int), \
+               ['extension executed']
+
+    def finish(self, bath_id):
+        return -1, ['not executed at the end']
