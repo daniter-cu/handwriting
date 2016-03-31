@@ -8,7 +8,7 @@ from raccoon import Extension
 from raccoon.extensions import Saver, ValMonitor
 
 from data import char2int
-from utilities import plot_batch
+from utilities import plot_coord, plot_generated_sequences
 
 floatX = theano.config.floatX
 
@@ -33,7 +33,7 @@ class Sampler(Extension):
         sample = self.fun_pred(np.zeros((self.n_samples, 3), floatX),
                                np.zeros((self.n_samples, self.n_hidden), floatX))
 
-        plot_batch(sample,
+        plot_coord(sample,
                    folder_path=self.folder_path,
                    file_name='{}_'.format(batch_id) + self.file_name)
 
@@ -64,20 +64,26 @@ class SamplerCond(Extension):
         # Initial values
         self.coord_ini_mat = np.zeros((n_samples, 3), floatX)
         self.h_ini_mat = np.zeros((n_samples, model.n_hidden), floatX)
-        self.w_ini_mat = np.zeros((n_samples, model.n_chars), floatX)
         self.k_ini_mat = np.zeros((n_samples, model.n_mixt_attention), floatX)
+        self.w_ini_mat = np.zeros((n_samples, model.n_chars), floatX)
 
     def execute_virtual(self, batch_id):
 
         cond, cond_mask = char2int(self.sample_strings, self.dict_char2int)
 
-        sample, w_gen = self.f_sampling(
+        coord_gen, a_gen, k_gen, p_gen, w_gen, mask_gen = self.f_sampling(
                 self.coord_ini_mat, cond, cond_mask,
-                self.h_ini_mat, self.w_ini_mat, self.k_ini_mat, self.bias_value)
+                self.h_ini_mat, self.k_ini_mat, self.w_ini_mat, self.bias_value)
 
-        plot_batch(sample,
-                   folder_path=self.folder_path,
-                   file_name='{}_'.format(batch_id) + self.file_name)
+        # plot_coord(coord_gen,
+        #            folder_path=self.folder_path,
+        #            file_name='{}_'.format(batch_id) + self.file_name)
+        mats = [(a_gen, 'alpha'), (k_gen, 'kapa'), (p_gen.T, 'phi'),
+                (w_gen, 'omega')]
+        plot_generated_sequences(
+            coord_gen, mats,
+            mask_gen, folder_path=self.folder_path,
+            file_name='{}_'.format(batch_id) + self.file_name)
 
         return ['executed']
 
@@ -121,16 +127,17 @@ class ValMonitorHandwriting(ValMonitor):
     external fuel stream.
     """
     def __init__(self, name_extension, freq, inputs, monitored_variables,
-                 stream, model, h_ini, w_ini, k_ini, batch_size, **kwargs):
+                 stream, updates, model, h_ini, k_ini, w_ini, batch_size,
+                 **kwargs):
         ValMonitor.__init__(self, name_extension, freq, inputs,
-                            monitored_variables, stream, **kwargs)
+                            monitored_variables, stream, updates, **kwargs)
         self.stream = stream
         self.model = model
 
         self.h_ini = h_ini
-        self.w_ini = w_ini
         self.k_ini = k_ini
-        self.var = [h_ini, w_ini, k_ini]
+        self.w_ini = w_ini
+        self.var = [h_ini, k_ini, w_ini]
         self.batch_size = batch_size
 
     def compute_current_values(self):
@@ -139,7 +146,7 @@ class ValMonitorHandwriting(ValMonitor):
         previous_states = [v.get_value() for v in self.var]
 
         self.model.reset_shared_init_states(
-            self.h_ini, self.w_ini, self.k_ini, self.batch_size)
+            self.h_ini, self.k_ini, self.w_ini, self.batch_size)
 
         c = 0.0
         for inputs, signal in self.stream():
@@ -148,7 +155,7 @@ class ValMonitorHandwriting(ValMonitor):
 
             if signal:
                 self.model.reset_shared_init_states(
-                    self.h_ini, self.w_ini, self.k_ini, self.batch_size)
+                    self.h_ini, self.k_ini, self.w_ini, self.batch_size)
 
         # restore states
         for s, v in zip(previous_states, self.var):

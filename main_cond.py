@@ -17,8 +17,8 @@ from extensions import SamplerCond, SamplingFunctionSaver, ValMonitorHandwriting
 from utilities import create_train_tag_values, create_gen_tag_values
 
 theano.config.floatX = 'float32'
-# theano.config.optimizer = 'None'
-# theano.config.compute_test_value = 'raise'
+theano.config.optimizer = 'None'
+theano.config.compute_test_value = 'raise'
 floatX = theano.config.floatX
 np.random.seed(42)
 
@@ -30,9 +30,9 @@ n_mixt_attention = 10
 n_gaussian_mixtures = 20
 gain = 0.01
 batch_size = 50  # batch_size
-chunk = 20
-every = 2000
-every_val = 20000
+chunk = None
+every = 1
+every_val = 1000
 sample_strings = ['Jose is a raccoon !']*4
 tmp_path = os.environ.get('TMP_PATH')
 dump_path = os.path.join(tmp_path, 'handwriting',
@@ -53,7 +53,7 @@ val_coord_seq, val_coord_idx, val_strings_seq, val_strings_idx = \
 valid_batch_gen = create_generator(
     True, batch_size,
     val_coord_seq, val_coord_idx,
-    val_strings_seq, val_strings_idx, chunk=None)
+    val_strings_seq, val_strings_idx, chunk=chunk)
 
 # MODEL CREATION
 # shape (seq, element_id, features)
@@ -68,10 +68,10 @@ create_train_tag_values(seq_coord, seq_str, seq_tg, seq_pt_mask,
 
 model = ConditionedModel(gain, n_hidden, n_chars, n_mixt_attention,
                          n_gaussian_mixtures)
-h_ini, w_ini, k_ini = model.create_shared_init_states(batch_size)
-loss, updates, monitoring = model.apply(seq_coord, seq_pt_mask, seq_tg,
-                                        seq_str, seq_str_mask,
-                                        h_ini, w_ini, k_ini)
+h_ini, k_ini, w_ini = model.create_shared_init_states(batch_size)
+loss, updates_ini, monitoring = model.apply(seq_coord, seq_pt_mask, seq_tg,
+                                            seq_str, seq_str_mask,
+                                            h_ini, k_ini, w_ini)
 loss.name = 'negll'
 
 
@@ -86,22 +86,23 @@ updates_params = adam(grads, params, 0.0003)
 # for p, g in zip(params, grads):
 #     updates_params.append((p, p - learning_rate * g))
 
-updates_all = updates + updates_params
+updates_all = updates_ini + updates_params
 
 
 # SAMPLING FUNCTION
-coord_ini, h_ini_pred, w_ini_pred, k_ini_pred, bias = \
+coord_ini, h_ini_pred, k_ini_pred, w_ini_pred, bias = \
     model.create_sym_init_states()
-create_gen_tag_values(model, coord_ini, h_ini_pred, w_ini_pred, k_ini_pred,
-                      seq_str, seq_str_mask)  # for debug
+create_gen_tag_values(model, coord_ini, h_ini_pred, k_ini_pred, w_ini_pred,
+                      bias, seq_str, seq_str_mask)  # for debug
 
-coord_gen, w_gen, updates_pred = model.prediction(
-    coord_ini, seq_str, seq_str_mask,
-    h_ini_pred, w_ini_pred, k_ini_pred, bias=bias)
+(coord_gen, a_gen, k_gen, p_gen, w_gen, mask_gen), updates_pred = \
+    model.prediction(coord_ini, seq_str, seq_str_mask,
+                     h_ini_pred, k_ini_pred, w_ini_pred, bias=bias)
 
 f_sampling = theano.function(
-    [coord_ini, seq_str, seq_str_mask, h_ini_pred, w_ini_pred, k_ini_pred,
-     bias], [coord_gen, w_gen], updates=updates_pred)
+    [coord_ini, seq_str, seq_str_mask, h_ini_pred, k_ini_pred, w_ini_pred,
+     bias], [coord_gen, a_gen, k_gen, p_gen, w_gen, mask_gen],
+    updates=updates_pred)
 
 
 # MONITORING
@@ -112,7 +113,7 @@ train_monitor = TrainMonitor(
 valid_monitor = ValMonitorHandwriting(
     'Validation', every_val, [seq_coord, seq_tg, seq_pt_mask, seq_str,
                               seq_str_mask], [loss] + monitoring,
-    valid_batch_gen, model, h_ini, w_ini, k_ini, batch_size,
+    valid_batch_gen, updates_ini, model, h_ini, k_ini, w_ini, batch_size,
     apply_at_the_start=False)
 
 sampler = SamplerCond('sampler', every, dump_path, 'essai',
@@ -127,7 +128,7 @@ train_m = Trainer(train_monitor, [valid_monitor, sampler, sampling_saver], [])
 
 
 it = epoch = 0
-model.reset_shared_init_states(h_ini, w_ini, k_ini, batch_size)
+model.reset_shared_init_states(h_ini, k_ini, w_ini, batch_size)
 try:
     while True:
         epoch += 1
@@ -135,7 +136,7 @@ try:
             res = train_m.process_batch(epoch, it, *inputs)
 
             if next_seq:
-                model.reset_shared_init_states(h_ini, w_ini, k_ini, batch_size)
+                model.reset_shared_init_states(h_ini, k_ini, w_ini, batch_size)
             it += 1
             if res:
                 train_m.finish(it)

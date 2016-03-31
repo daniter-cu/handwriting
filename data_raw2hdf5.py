@@ -110,11 +110,11 @@ pt_seq[:, 1] = (pt_seq[:, 1] - M_y) / s_y
 
 
 #
-from utilities import plot_batch
+from utilities import plot_coord
 from data import extract_sequence
 pt_batch, pt_mask_batch, str_batch = \
     extract_sequence(slice(0, 4), pt_seq, pt_idx, str_seq, str_idx)
-plot_batch(pt_batch, pt_mask_batch, use_mask=True, show=True)
+plot_coord(pt_batch, pt_mask_batch, use_mask=True, show=True)
 
 
 

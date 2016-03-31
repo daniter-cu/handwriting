@@ -22,7 +22,7 @@ import cPickle
 import time
 
 from data import char2int
-from utilities import plot_batch
+from utilities import plot_generated_sequences
 
 floatX = theano.config.floatX
 
@@ -50,15 +50,21 @@ if __name__ == '__main__':
     n_samples = len(sample_string)
     coord_ini_mat = np.zeros((n_samples, 3), floatX)
     h_ini_mat = np.zeros((n_samples, model.n_hidden), floatX)
-    w_ini_mat = np.zeros((n_samples, model.n_chars), floatX)
     k_ini_mat = np.zeros((n_samples, model.n_mixt_attention), floatX)
+    w_ini_mat = np.zeros((n_samples, model.n_chars), floatX)
 
     print 'Generating... ',
     beg = time.clock()
-    sample, w_gen = f_sampling(
+    coord_gen, a_gen, k_gen, p_gen, w_gen, mask_gen = f_sampling(
         coord_ini_mat, cond, cond_mask,
-        h_ini_mat, w_ini_mat, k_ini_mat, options.bias)
+        h_ini_mat, k_ini_mat, w_ini_mat, options.bias)
     print 'done in {} seconds'.format(time.clock()-beg)
-    plot_batch(sample,
-               folder_path='./',
-               file_name='a_just_now')
+    mats = [(a_gen, 'alpha'), (k_gen, 'kapa'), (p_gen.T, 'phi'),
+            (w_gen, 'omega')]
+    print 'Printing...',
+    beg = time.clock()
+    plot_generated_sequences(
+        coord_gen, mats,
+        mask_gen, folder_path='./',
+        file_name='a_just_now')
+    print 'done in {} seconds'.format(time.clock() - beg)

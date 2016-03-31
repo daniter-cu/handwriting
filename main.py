@@ -14,7 +14,7 @@ from data import create_generator, load_data, extract_sequence
 from model import UnconditionedModel
 from extensions import Sampler
 
-from utilities import plot_seq, plot_batch
+from utilities import plot_seq, plot_coord
 
 theano.config.floatX = 'float32'
 # theano.config.optimizer = 'None'
@@ -41,7 +41,7 @@ tr_coord_seq, tr_coord_idx, tr_strings_seq, tr_strings_idx = \
 # pt_batch, pt_mask_batch, str_batch = \
 #     extract_sequence(slice(0, 4),
 #                    tr_coord_seq, tr_coord_idx, tr_strings_seq, tr_strings_idx)
-# plot_batch(pt_batch, pt_mask_batch, use_mask=True, show=True)
+# plot_coord(pt_batch, pt_mask_batch, use_mask=True, show=True)
 batch_gen = create_generator(
         True, batch_size,
         tr_coord_seq, tr_coord_idx,

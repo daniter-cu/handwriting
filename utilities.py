@@ -15,7 +15,40 @@ s_x = 40.3719
 s_y = 37.0466
 
 
-def plot_batch(pt_batch, pt_mask_batch=None, use_mask=False, show=False, folder_path=None, file_name=None):
+
+
+def plot_generated_sequences(coord_batch, other_mats, coord_mask=None,
+                             show=False, folder_path=None, file_name=None):
+
+    # Renorm batch
+    batch_normed = np.zeros_like(coord_batch, dtype=coord_batch.dtype)
+    batch_normed[:] = coord_batch
+    batch_normed[:, :, 0] = s_x * batch_normed[:, :, 0] + M_x
+    batch_normed[:, :, 1] = s_y * batch_normed[:, :, 1] + M_y
+
+    n_samples = batch_normed.shape[1]
+    n_mats = len(other_mats)
+    n_plots = (1 + n_mats) * n_samples
+    fig = plt.figure(figsize=(10*n_samples, (1 + n_mats) * 3))
+
+    for i in range(n_samples):
+        mask_term = coord_mask[:, i].astype(bool)
+        splot_coord = plt.subplot2grid((1 + n_mats, n_samples), (0, i))
+        plot_seq(splot_coord, batch_normed[:, i], mask_term)
+
+        for j, (mat, title) in enumerate(other_mats):
+            splot_coord = plt.subplot2grid((1 + n_mats, n_samples), (j+1, i))
+            plot_matrix(splot_coord, mat[:, i], title)
+
+    if folder_path and file_name:
+        fig.savefig(os.path.join(folder_path, file_name + '.png'),
+                    bbox_inches='tight', dpi=200)
+    if show:
+        plt.show()
+    plt.close()
+
+
+def plot_coord(pt_batch, pt_mask_batch=None, use_mask=False, show=False, folder_path=None, file_name=None):
     batch_normed = np.zeros_like(pt_batch, dtype=pt_batch.dtype)
     batch_normed[:] = pt_batch
     batch_normed[:, :, 0] = s_x * batch_normed[:, :, 0] + M_x
@@ -68,6 +101,12 @@ def plot_seq(subplot, seq_pt, seq_mask=np.array([]), norm=False):
     subplot.axis('equal')
 
 
+def plot_matrix(subplot, mat, title=''):
+    subplot.matshow(mat.T)
+    subplot.set_aspect('auto')
+    subplot.set_title(title)
+
+
 def create_train_tag_values(seq_coord, seq_str, seq_tg, seq_pt_mask,
                             seq_str_mask, batch_size):
     f_s_pt = 6
@@ -79,15 +118,16 @@ def create_train_tag_values(seq_coord, seq_str, seq_tg, seq_pt_mask,
     seq_str_mask.tag.test_value = np.ones((f_s_str, batch_size), dtype=floatX)
 
 
-def create_gen_tag_values(model, coord_ini, h_ini_pred, w_ini_pred, k_ini_pred,
-                          seq_str, seq_str_mask):
+def create_gen_tag_values(model, coord_ini, h_ini_pred, k_ini_pred, w_ini_pred,
+                          bias, seq_str, seq_str_mask):
     f_s_str = 7
     n_samples = 3
     n_hidden, n_chars = model.n_hidden, model.n_chars
     n_mixt_attention = model.n_mixt_attention
     coord_ini.tag.test_value = np.zeros((n_samples, 3), floatX)
     h_ini_pred.tag.test_value = np.zeros((n_samples, n_hidden), floatX)
-    w_ini_pred.tag.test_value = np.zeros((n_samples, n_chars), floatX)
     k_ini_pred.tag.test_value = np.zeros((n_samples, n_mixt_attention), floatX)
+    w_ini_pred.tag.test_value = np.zeros((n_samples, n_chars), floatX)
+    bias.tag.test_value = np.float32(0.0)
     seq_str.tag.test_value = np.zeros((f_s_str, n_samples), dtype='int32')
     seq_str_mask.tag.test_value = np.ones((f_s_str, n_samples), dtype=floatX)
