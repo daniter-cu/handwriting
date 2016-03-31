@@ -59,7 +59,8 @@ if __name__ == '__main__':
         coord_ini_mat, cond, cond_mask,
         h_ini_mat, k_ini_mat, w_ini_mat, options.bias)
     print 'done in {} seconds'.format(time.clock()-beg)
-    mats = [(a_gen, 'alpha'), (k_gen, 'kapa'), (p_gen.T, 'phi'),
+    p_gen = np.swapaxes(p_gen, 1, 2)
+    mats = [(a_gen, 'alpha'), (k_gen, 'kapa'), (p_gen, 'phi'),
             (w_gen, 'omega')]
     print 'Printing...',
     beg = time.clock()

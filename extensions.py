@@ -78,7 +78,8 @@ class SamplerCond(Extension):
         # plot_coord(coord_gen,
         #            folder_path=self.folder_path,
         #            file_name='{}_'.format(batch_id) + self.file_name)
-        mats = [(a_gen, 'alpha'), (k_gen, 'kapa'), (p_gen.T, 'phi'),
+        p_gen = np.swapaxes(p_gen, 1, 2)
+        mats = [(a_gen, 'alpha'), (k_gen, 'kapa'), (p_gen, 'phi'),
                 (w_gen, 'omega')]
         plot_generated_sequences(
             coord_gen, mats,
