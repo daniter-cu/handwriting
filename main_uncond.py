@@ -16,10 +16,9 @@ from extensions import Sampler
 
 from utilities import plot_seq, plot_seq_pt
 
-theano.config.floatX = 'float32'
+floatX = theano.config.floatX = 'float32'
 # theano.config.optimizer = 'None'
-floatX = theano.config.floatX
-np.random.seed(42)
+# np.random.seed(42)
 
 # CONFIG
 learning_rate = 0.1
