@@ -1,5 +1,10 @@
 #!/usr/bin/env python
 
+"""
+Generate .hdf5 training and validation datasets from the raw files.
+Inspired from Alex Graves' pipeline.
+"""
+
 import time
 import os
 from os.path import join
@@ -23,6 +28,7 @@ strokes_filename = join(data_folder, dataset + '_set.txt')
 h5_filename = join(data_folder, 'handwriting_' + dataset + '.hdf5')
 
 char_dic, _ = cPickle.load(open('char_dict.pkl', 'r'))
+
 
 def get_target_string(stroke_filename):
 
@@ -50,9 +56,9 @@ def read_file(file_path):
     pts = []
     pre_pt = np.array([])
     for trace in parse(file_path).getElementsByTagName('Stroke'):
-        for coords in trace.getElementsByTagName('Point'):
-            pt = np.array([coords.getAttribute('x').strip(),
-                           coords.getAttribute('y').strip(), 0],
+        for pts in trace.getElementsByTagName('Point'):
+            pt = np.array([pts.getAttribute('x').strip(),
+                           pts.getAttribute('y').strip(), 0],
                           dtype='float32')
             if not len(pre_pt):
                 pre_pt = pt
@@ -99,26 +105,12 @@ pt_seq = np.array(pt_seq, dtype='float32')
 print time.clock() - start
 
 
-# M_x = pt_seq[:, 0].mean()
-# M_y = pt_seq[:, 1].mean()
-# s_x = pt_seq[:, 0].std()
-# s_y = pt_seq[:, 1].std()
-
 # Normalize
 pt_seq[:, 0] = (pt_seq[:, 0] - M_x) / s_x
 pt_seq[:, 1] = (pt_seq[:, 1] - M_y) / s_y
 
 
-#
-from utilities import plot_coord
-from data import extract_sequence
-pt_batch, pt_mask_batch, str_batch = \
-    extract_sequence(slice(0, 4), pt_seq, pt_idx, str_seq, str_idx)
-plot_coord(pt_batch, pt_mask_batch, use_mask=True, show=True)
-
-
-
-
+# Write the dataset
 f = h5py.File(h5_filename, 'w')
 
 ds_points = f.create_dataset(

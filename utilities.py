@@ -2,12 +2,12 @@ import os
 
 import numpy as np
 import matplotlib
-matplotlib.use('Agg')
 import matplotlib.pyplot as plt
 
 import theano
-floatX = theano.config.floatX
 
+matplotlib.use('Agg')
+floatX = theano.config.floatX
 
 M_x = 8.18586
 M_y = 0.11457
@@ -15,30 +15,38 @@ s_x = 40.3719
 s_y = 37.0466
 
 
-
-
-def plot_generated_sequences(coord_batch, other_mats, coord_mask=None,
+def plot_generated_sequences(pt_batch, other_mats=None, pt_mask=None,
                              show=False, folder_path=None, file_name=None):
+    """
+    Plot sequences of (x, y, penup) points and other information
+
+    Parameters:
+    -----------
+    pt_batch: numpy array (seq_length, batch_size, 3)
+    other_mats: list of numpy arrays of shapes (seq_length, batch_size)
+    pt_mask: numpy array (seq_length, batch_size)
+    """
+    if not other_mats:
+        other_mats = []
 
     # Renorm batch
-    batch_normed = np.zeros_like(coord_batch, dtype=coord_batch.dtype)
-    batch_normed[:] = coord_batch
+    batch_normed = np.zeros_like(pt_batch, dtype=pt_batch.dtype)
+    batch_normed[:] = pt_batch
     batch_normed[:, :, 0] = s_x * batch_normed[:, :, 0] + M_x
     batch_normed[:, :, 1] = s_y * batch_normed[:, :, 1] + M_y
 
     n_samples = batch_normed.shape[1]
     n_mats = len(other_mats)
-    n_plots = (1 + n_mats) * n_samples
     fig = plt.figure(figsize=(10*n_samples, (1 + n_mats) * 3))
 
     for i in range(n_samples):
-        mask_term = coord_mask[:, i].astype(bool)
-        splot_coord = plt.subplot2grid((1 + n_mats, n_samples), (0, i))
-        plot_seq(splot_coord, batch_normed[:, i], mask_term)
+        mask_term = pt_mask[:, i].astype(bool)
+        splot_pt = plt.subplot2grid((1 + n_mats, n_samples), (0, i))
+        plot_seq(splot_pt, batch_normed[:, i], mask_term)
 
         for j, (mat, title) in enumerate(other_mats):
-            splot_coord = plt.subplot2grid((1 + n_mats, n_samples), (j+1, i))
-            plot_matrix(splot_coord, mat[:, i], title)
+            splot_pt = plt.subplot2grid((1 + n_mats, n_samples), (j+1, i))
+            plot_matrix(splot_pt, mat[:, i], title)
 
     if folder_path and file_name:
         fig.savefig(os.path.join(folder_path, file_name + '.png'),
@@ -48,7 +56,8 @@ def plot_generated_sequences(coord_batch, other_mats, coord_mask=None,
     plt.close()
 
 
-def plot_coord(pt_batch, pt_mask_batch=None, use_mask=False, show=False, folder_path=None, file_name=None):
+def plot_seq_pt(pt_batch, pt_mask_batch=None, use_mask=False, show=False,
+                folder_path=None, file_name=None):
     batch_normed = np.zeros_like(pt_batch, dtype=pt_batch.dtype)
     batch_normed[:] = pt_batch
     batch_normed[:, :, 0] = s_x * batch_normed[:, :, 0] + M_x
@@ -89,15 +98,15 @@ def plot_seq(subplot, seq_pt, seq_mask=np.array([]), norm=False):
     if seq_mask.size:
         seq_normed = seq_normed[seq_mask.astype(bool)]
 
-    coord = seq_normed[:, 0:2]
+    pt = seq_normed[:, 0:2]
     penup = seq_normed[:, 2].astype(bool)
 
     pos = np.where(penup)[0]+1
 
-    coord = np.cumsum(coord, axis=0)
-    coord = np.insert(coord, pos, [np.nan, np.nan], axis=0)
+    pt = np.cumsum(pt, axis=0)
+    pt = np.insert(pt, pos, [np.nan, np.nan], axis=0)
 
-    subplot.plot(coord[:, 0], -coord[:, 1])
+    subplot.plot(pt[:, 0], -pt[:, 1])
     subplot.axis('equal')
 
 
@@ -107,24 +116,24 @@ def plot_matrix(subplot, mat, title=''):
     subplot.set_title(title)
 
 
-def create_train_tag_values(seq_coord, seq_str, seq_tg, seq_pt_mask,
+def create_train_tag_values(seq_pt, seq_str, seq_tg, seq_pt_mask,
                             seq_str_mask, batch_size):
     f_s_pt = 6
     f_s_str = 7
-    seq_coord.tag.test_value = np.zeros((f_s_pt, batch_size, 3), dtype=floatX)
+    seq_pt.tag.test_value = np.zeros((f_s_pt, batch_size, 3), dtype=floatX)
     seq_str.tag.test_value = np.zeros((f_s_str, batch_size), dtype='int32')
     seq_tg.tag.test_value = np.ones((f_s_pt, batch_size, 3), dtype=floatX)
     seq_pt_mask.tag.test_value = np.ones((f_s_pt, batch_size), dtype=floatX)
     seq_str_mask.tag.test_value = np.ones((f_s_str, batch_size), dtype=floatX)
 
 
-def create_gen_tag_values(model, coord_ini, h_ini_pred, k_ini_pred, w_ini_pred,
+def create_gen_tag_values(model, pt_ini, h_ini_pred, k_ini_pred, w_ini_pred,
                           bias, seq_str, seq_str_mask):
     f_s_str = 7
     n_samples = 3
     n_hidden, n_chars = model.n_hidden, model.n_chars
     n_mixt_attention = model.n_mixt_attention
-    coord_ini.tag.test_value = np.zeros((n_samples, 3), floatX)
+    pt_ini.tag.test_value = np.zeros((n_samples, 3), floatX)
     h_ini_pred.tag.test_value = np.zeros((n_samples, n_hidden), floatX)
     k_ini_pred.tag.test_value = np.zeros((n_samples, n_mixt_attention), floatX)
     w_ini_pred.tag.test_value = np.zeros((n_samples, n_chars), floatX)

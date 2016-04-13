@@ -13,29 +13,30 @@ def load_data(filename='hand_training.hdf5'):
     training_data_file = os.path.join(data_folder, filename)
     train_data = h5py.File(training_data_file, 'r')
 
-    coord_seq = train_data['pt_seq'][:]
-    coord_idx = train_data['pt_idx'][:]
+    pt_seq = train_data['pt_seq'][:]
+    pt_idx = train_data['pt_idx'][:]
     strings_seq = train_data['str_seq'][:]
     strings_idx = train_data['str_idx'][:]
 
     train_data.close()
-    return coord_seq, coord_idx, strings_seq, strings_idx
+    return pt_seq, pt_idx, strings_seq, strings_idx
 
 
-def create_generator(shuffle, batch_size, seq_coord, coord_idx,
+def create_generator(shuffle, batch_size, seq_pt, pt_idx,
                      seq_strings, strings_idx, chunk=None):
-    n_seq = coord_idx.shape[0]
-    idx = np.arange(n_seq)
-    np.random.shuffle(idx)
+    n_seq = pt_idx.shape[0]
 
-    coord_idx = coord_idx[idx]
-    strings_idx = strings_idx[idx]
+    if shuffle:
+        idx = np.arange(n_seq)
+        np.random.shuffle(idx)
+        pt_idx = pt_idx[idx]
+        strings_idx = strings_idx[idx]
 
     def generator():
         for i in range(0, n_seq-batch_size, batch_size):
             pt, pt_mask, str, str_mask = \
                 extract_sequence(slice(i, i + batch_size),
-                                 seq_coord, coord_idx, seq_strings, strings_idx)
+                                 seq_pt, pt_idx, seq_strings, strings_idx)
 
             pt_input = pt[:-1]
             pt_tg = pt[1:]
@@ -55,18 +56,18 @@ def create_generator(shuffle, batch_size, seq_coord, coord_idx,
     return generator
 
 
-def extract_sequence(slice, coord, coord_idx, strings, str_idx, M=None):
+def extract_sequence(s, pt, pt_idx, strings, str_idx, M=None):
     """
-    the slice represents the minibatch
-    - coord: shape (number points, 3)
-    - coord_idx: shape (number of sequences, 2): the starting and end points of
+    the slice s represents the minibatch
+    - pt: shape (number points, 3)
+    - pt_idx: shape (number of sequences, 2): the starting and end points of
         each sequence
     """
     if not M:
         M = 1500
 
-    pt_idxs = coord_idx[slice]
-    str_idxs = str_idx[slice]
+    pt_idxs = pt_idx[s]
+    str_idxs = str_idx[s]
 
     longuest_pt_seq = max([b - a for a, b in pt_idxs])
     longuest_pt_seq = min(M, longuest_pt_seq)
@@ -78,7 +79,7 @@ def extract_sequence(slice, coord, coord_idx, strings, str_idx, M=None):
     str_mask_batch = np.zeros((longuest_str_seq, len(str_idxs)), dtype=floatX)
 
     for i, (pt_seq, str_seq) in enumerate(zip(pt_idxs, str_idxs)):
-        pts = coord[pt_seq[0]:pt_seq[1]]
+        pts = pt[pt_seq[0]:pt_seq[1]]
         limit2 = min(pts.shape[0], longuest_pt_seq)
         pt_batch[:limit2, i] = pts[:limit2]
         pt_mask_batch[:limit2, i] = 1

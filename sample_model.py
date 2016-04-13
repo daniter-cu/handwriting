@@ -1,20 +1,5 @@
-import os
-import sys
-import cPickle
-
-from lasagne.updates import adam
 import numpy as np
 import theano
-import theano.tensor as T
-
-from raccoon.trainer import Trainer
-from raccoon.extensions import TrainMonitor
-from raccoon.archi.utils import clip_norm_gradients
-
-from data import create_generator, load_data, extract_sequence
-from model import ConditionedModel
-from extensions import SamplerCond, SamplingFunctionSaver
-from utilities import create_train_tag_values, create_gen_tag_values
 
 
 import argparse
@@ -48,15 +33,15 @@ if __name__ == '__main__':
     cond, cond_mask = char2int(sample_string, dict_char2int)
 
     n_samples = len(sample_string)
-    coord_ini_mat = np.zeros((n_samples, 3), floatX)
+    pt_ini_mat = np.zeros((n_samples, 3), floatX)
     h_ini_mat = np.zeros((n_samples, model.n_hidden), floatX)
     k_ini_mat = np.zeros((n_samples, model.n_mixt_attention), floatX)
     w_ini_mat = np.zeros((n_samples, model.n_chars), floatX)
 
     print 'Generating... ',
     beg = time.clock()
-    coord_gen, a_gen, k_gen, p_gen, w_gen, mask_gen = f_sampling(
-        coord_ini_mat, cond, cond_mask,
+    pt_gen, a_gen, k_gen, p_gen, w_gen, mask_gen = f_sampling(
+        pt_ini_mat, cond, cond_mask,
         h_ini_mat, k_ini_mat, w_ini_mat, options.bias)
     print 'done in {} seconds'.format(time.clock()-beg)
     p_gen = np.swapaxes(p_gen, 1, 2)
@@ -65,7 +50,7 @@ if __name__ == '__main__':
     print 'Printing...',
     beg = time.clock()
     plot_generated_sequences(
-        coord_gen, mats,
+        pt_gen, mats,
         mask_gen, folder_path='./',
         file_name='a_just_now')
     print 'done in {} seconds'.format(time.clock() - beg)

@@ -8,7 +8,7 @@ from raccoon import Extension
 from raccoon.extensions import Saver, ValMonitor
 
 from data import char2int
-from utilities import plot_coord, plot_generated_sequences
+from utilities import plot_seq_pt, plot_generated_sequences
 
 floatX = theano.config.floatX
 
@@ -33,9 +33,9 @@ class Sampler(Extension):
         sample = self.fun_pred(np.zeros((self.n_samples, 3), floatX),
                                np.zeros((self.n_samples, self.n_hidden), floatX))
 
-        plot_coord(sample,
-                   folder_path=self.folder_path,
-                   file_name='{}_'.format(batch_id) + self.file_name)
+        plot_seq_pt(sample,
+                    folder_path=self.folder_path,
+                    file_name='{}_'.format(batch_id) + self.file_name)
 
         return ['executed']
 
@@ -62,7 +62,7 @@ class SamplerCond(Extension):
         self.bias_value = bias_value
 
         # Initial values
-        self.coord_ini_mat = np.zeros((n_samples, 3), floatX)
+        self.pt_ini_mat = np.zeros((n_samples, 3), floatX)
         self.h_ini_mat = np.zeros((n_samples, model.n_hidden), floatX)
         self.k_ini_mat = np.zeros((n_samples, model.n_mixt_attention), floatX)
         self.w_ini_mat = np.zeros((n_samples, model.n_chars), floatX)
@@ -71,18 +71,18 @@ class SamplerCond(Extension):
 
         cond, cond_mask = char2int(self.sample_strings, self.dict_char2int)
 
-        coord_gen, a_gen, k_gen, p_gen, w_gen, mask_gen = self.f_sampling(
-                self.coord_ini_mat, cond, cond_mask,
+        pt_gen, a_gen, k_gen, p_gen, w_gen, mask_gen = self.f_sampling(
+                self.pt_ini_mat, cond, cond_mask,
                 self.h_ini_mat, self.k_ini_mat, self.w_ini_mat, self.bias_value)
 
-        # plot_coord(coord_gen,
+        # plot_seq_pt(pt_gen,
         #            folder_path=self.folder_path,
         #            file_name='{}_'.format(batch_id) + self.file_name)
         p_gen = np.swapaxes(p_gen, 1, 2)
         mats = [(a_gen, 'alpha'), (k_gen, 'kapa'), (p_gen, 'phi'),
                 (w_gen, 'omega')]
         plot_generated_sequences(
-            coord_gen, mats,
+            pt_gen, mats,
             mask_gen, folder_path=self.folder_path,
             file_name='{}_'.format(batch_id) + self.file_name)
 
