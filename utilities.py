@@ -2,11 +2,11 @@ import os
 
 import numpy as np
 import matplotlib
+matplotlib.use('Agg')
 import matplotlib.pyplot as plt
 
 import theano
 
-matplotlib.use('Agg')
 floatX = theano.config.floatX
 
 M_x = 8.18586

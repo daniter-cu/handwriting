@@ -25,7 +25,7 @@ floatX = theano.config.floatX = 'float32'
 # CONFIG #
 ##########
 learning_rate = 0.1
-n_hidden = 1200
+n_hidden = 400
 n_chars = 81
 n_mixt_attention = 10
 n_mixt_output = 20
