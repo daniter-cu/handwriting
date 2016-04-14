@@ -46,7 +46,7 @@ def plot_generated_sequences(pt_batch, other_mats=None, pt_mask=None,
 
         for j, (mat, title) in enumerate(other_mats):
             splot_pt = plt.subplot2grid((1 + n_mats, n_samples), (j+1, i))
-            plot_matrix(splot_pt, mat[:, i], title)
+            plot_matrix(splot_pt, mat[:, i], mask_term, title)
 
     if folder_path and file_name:
         fig.savefig(os.path.join(folder_path, file_name + '.png'),
@@ -110,7 +110,10 @@ def plot_seq(subplot, seq_pt, seq_mask=np.array([]), norm=False):
     subplot.axis('equal')
 
 
-def plot_matrix(subplot, mat, title=''):
+def plot_matrix(subplot, mat, seq_mask=np.array([]), title=''):
+    if seq_mask.size:
+        mat = mat[seq_mask.astype(bool)]
+
     subplot.matshow(mat.T)
     subplot.set_aspect('auto')
     subplot.set_title(title)
