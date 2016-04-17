@@ -9,7 +9,7 @@ import theano.tensor as T
 
 from raccoon.trainer import Trainer
 from raccoon.extensions import TrainMonitor
-from raccoon.archi.utils import clip_norm_gradients
+from raccoon.layers.utils import clip_norm_gradients
 
 from data import create_generator, load_data, extract_sequence
 from model import ConditionedModel

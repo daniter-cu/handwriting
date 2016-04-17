@@ -6,12 +6,12 @@ from theano.tensor.shared_randomstreams import RandomStreams
 import numpy as np
 from lasagne.init import GlorotNormal
 
-from raccoon.archi import GRULayer, PositionAttentionLayer
-from raccoon.archi.utils import create_uneven_weight
+from raccoon.layers.attention import PositionAttentionLayer
+from raccoon.layers.reccurrent import GRULayer
+from raccoon.layers.utils import create_uneven_weight
 
 theano.config.floatX = 'float32'
 floatX = theano.config.floatX
-np.random.seed(42)
 
 
 def logsumexp(x, axis=None):
