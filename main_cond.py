@@ -139,26 +139,23 @@ sampling_saver = SamplingFunctionSaver(
     valid_monitor, loss, valid_freq_print, dump_path, 'f_sampling', model,
     f_sampling, char_dict, apply_at_the_start=True)
 
-train_m = Trainer(train_monitor, [valid_monitor, sampler, sampling_saver], [])
+train_m = Trainer(train_monitor, train_batch_gen,
+                  [valid_monitor, sampler, sampling_saver], [])
 
 
 ############
 # TRAINING #
 ############
-it = epoch = 0
-model.reset_shared_init_states(h_ini, k_ini, w_ini, batch_size)
-try:
-    while True:
-        epoch += 1
-        for inputs, next_seq in train_batch_gen():
-            res = train_m.process_batch(epoch, it, *inputs)
 
-            if next_seq:
-                model.reset_shared_init_states(h_ini, k_ini, w_ini, batch_size)
-            it += 1
-            if res:
-                train_m.finish(it)
-                sys.exit()
-except KeyboardInterrupt:
-    print 'Training interrupted by user.'
-    train_m.finish(it)
+def custom_process_fun(generator_output):
+    inputs, next_seq = generator_output
+
+    res = train_m.process_batch(*inputs)
+
+    if next_seq:
+        model.reset_shared_init_states(h_ini, k_ini, w_ini, batch_size)
+
+    return res
+
+model.reset_shared_init_states(h_ini, k_ini, w_ini, batch_size)
+train_m.train(custom_process_fun)
