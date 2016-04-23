@@ -41,7 +41,7 @@ def get_target_string(stroke_filename):
     except (AttributeError, IndexError):
         raise SystemExit
 
-start = time.clock()
+start = time.time()
 
 pt_seq = []  # all sequences concatenated
 pt_idx = []  # dim (n_seq, 2) beginning and end of each sequence
@@ -102,7 +102,7 @@ for ii, l in enumerate(file(strokes_filename).readlines()):
 str_seq = np.array(str_seq, dtype='int32')
 pt_seq = np.array(pt_seq, dtype='float32')
 
-print time.clock() - start
+print time.time() - start
 
 
 # Normalize

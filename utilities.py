@@ -4,6 +4,7 @@ import numpy as np
 import matplotlib
 matplotlib.use('Agg')
 import matplotlib.pyplot as plt
+from mpl_toolkits.axes_grid1 import make_axes_locatable
 
 import theano
 
@@ -114,9 +115,12 @@ def plot_matrix(subplot, mat, seq_mask=np.array([]), title=''):
     if seq_mask.size:
         mat = mat[seq_mask.astype(bool)]
 
-    subplot.matshow(mat.T)
+    im = subplot.matshow(mat.T)
     subplot.set_aspect('auto')
     subplot.set_title(title)
+    cax = make_axes_locatable(subplot).append_axes("right", size="1%",
+                                                   pad=0.05)
+    plt.colorbar(im, cax=cax)
 
 
 def create_train_tag_values(seq_pt, seq_str, seq_tg, seq_pt_mask,
