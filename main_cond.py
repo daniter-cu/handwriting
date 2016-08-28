@@ -139,23 +139,26 @@ sampling_saver = SamplingFunctionSaver(
     valid_monitor, loss, valid_freq_print, dump_path, 'f_sampling', model,
     f_sampling, char_dict, apply_at_the_start=True)
 
-train_m = Trainer(train_monitor, train_batch_gen,
-                  [valid_monitor, sampler, sampling_saver], [])
-
-
-############
-# TRAINING #
-############
 
 def custom_process_fun(generator_output):
     inputs, next_seq = generator_output
 
-    res = train_m.process_batch(*inputs)
+    res = train_m.train_monitor.train(*inputs)
 
     if next_seq:
         model.reset_shared_init_states(h_ini, k_ini, w_ini, batch_size)
 
     return res
 
+
+train_m = Trainer(train_monitor, train_batch_gen,
+                  [valid_monitor, sampler, sampling_saver], [],
+                  custom_process_fun=custom_process_fun)
+
+
+############
+# TRAINING #
+############
+
 model.reset_shared_init_states(h_ini, k_ini, w_ini, batch_size)
-train_m.train(custom_process_fun)
+train_m.train()

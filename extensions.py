@@ -5,7 +5,7 @@ import theano.tensor as T
 import numpy as np
 
 from raccoon import Extension
-from raccoon.extensions import Saver, ValMonitor
+from raccoon.extensions import Saver, ValidationMonitor
 
 from data import char2int
 from utilities import plot_seq_pt, plot_generated_sequences
@@ -29,7 +29,7 @@ class Sampler(Extension):
         self.n_samples = n_samples
         self.n_hidden = n_hidden
 
-    def execute_virtual(self, batch_id):
+    def execute_virtual(self, batch_id, epoch_id):
         sample = self.fun_pred(np.zeros((self.n_samples, 3), floatX),
                                np.zeros((self.n_samples, self.n_hidden), floatX))
 
@@ -67,7 +67,7 @@ class SamplerCond(Extension):
         self.k_ini_mat = np.zeros((n_samples, model.n_mixt_attention), floatX)
         self.w_ini_mat = np.zeros((n_samples, model.n_chars), floatX)
 
-    def execute_virtual(self, batch_id):
+    def execute_virtual(self, batch_id, epoch_id):
 
         cond, cond_mask = char2int(self.sample_strings, self.dict_char2int)
 
@@ -122,7 +122,7 @@ class SamplingFunctionSaver(Saver):
         return -1, ['not executed at the end']
 
 
-class ValMonitorHandwriting(ValMonitor):
+class ValMonitorHandwriting(ValidationMonitor):
     """
     Extension to monitor tensor variables and MonitoredQuantity objects on an
     external fuel stream.
@@ -130,8 +130,9 @@ class ValMonitorHandwriting(ValMonitor):
     def __init__(self, name_extension, freq, inputs, monitored_variables,
                  stream, updates, model, h_ini, k_ini, w_ini, batch_size,
                  **kwargs):
-        ValMonitor.__init__(self, name_extension, freq, inputs,
-                            monitored_variables, stream, updates, **kwargs)
+        ValidationMonitor.__init__(self, name_extension, freq, inputs,
+                               monitored_variables, stream,
+                                   updates=updates, **kwargs)
         self.stream = stream
         self.model = model
 
@@ -141,7 +142,7 @@ class ValMonitorHandwriting(ValMonitor):
         self.var = [h_ini, k_ini, w_ini]
         self.batch_size = batch_size
 
-    def compute_current_values(self):
+    def compute_metrics(self):
 
         # Save current state
         previous_states = [v.get_value() for v in self.var]
@@ -149,18 +150,22 @@ class ValMonitorHandwriting(ValMonitor):
         self.model.reset_shared_init_states(
             self.h_ini, self.k_ini, self.w_ini, self.batch_size)
 
-        c = 0.0
+        metric_values = np.zeros(self.n_outputs, dtype=floatX)
+        counter_values = np.zeros(self.n_outputs, dtype=floatX)
+
         for inputs, signal in self.stream():
-            self.inc_values(*inputs)
-            c += 1
+            m_values, c_values = self.compute_metrics_minibatch(*inputs)
+            metric_values += m_values
+            counter_values += c_values
 
             if signal:
                 self.model.reset_shared_init_states(
                     self.h_ini, self.k_ini, self.w_ini, self.batch_size)
 
+        metric_values /= counter_values
+
         # restore states
         for s, v in zip(previous_states, self.var):
             v.set_value(s)
 
-        for i, agg_fun in enumerate(self.agg_fun):
-            self.current_values[i] = agg_fun(self.current_values[i], c)
+        return metric_values
