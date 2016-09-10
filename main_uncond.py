@@ -1,3 +1,7 @@
+"""
+Outdated code.
+"""
+
 import os
 import sys
 

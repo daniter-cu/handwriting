@@ -13,7 +13,8 @@ from raccoon.layers.utils import clip_norm_gradients
 
 from data import create_generator, load_data, extract_sequence
 from model import ConditionedModel
-from extensions import SamplerCond, SamplingFunctionSaver, ValMonitorHandwriting
+from raccoon_extensions import (SamplerCond, SamplingFunctionSaver,
+                                ValMonitorHandwriting)
 from utilities import create_train_tag_values, create_gen_tag_values
 
 floatX = theano.config.floatX = 'float32'
@@ -79,7 +80,6 @@ h_ini, k_ini, w_ini = model.create_shared_init_states(batch_size)
 loss, updates_ini, monitoring = model.apply(seq_pt, seq_pt_mask, seq_tg,
                                             seq_str, seq_str_mask,
                                             h_ini, k_ini, w_ini)
-loss.name = 'negll'
 
 
 ########################
@@ -123,11 +123,11 @@ f_sampling = theano.function(
 ##############
 train_monitor = TrainMonitor(
     train_freq_print, [seq_pt, seq_tg, seq_pt_mask, seq_str, seq_str_mask],
-    [loss] + monitoring, updates_all)
+    monitoring, updates_all)
 
 valid_monitor = ValMonitorHandwriting(
     'Validation', valid_freq_print, [seq_pt, seq_tg, seq_pt_mask, seq_str,
-                                     seq_str_mask], [loss] + monitoring,
+                                     seq_str_mask], monitoring,
     valid_batch_gen, updates_ini, model, h_ini, k_ini, w_ini, batch_size,
     apply_at_the_start=False)
 
@@ -136,8 +136,8 @@ sampler = SamplerCond('sampler', train_freq_print, dump_path, 'essai',
                       dict_char2int=char_dict, bias_value=0.5)
 
 sampling_saver = SamplingFunctionSaver(
-    valid_monitor, loss, valid_freq_print, dump_path, 'f_sampling', model,
-    f_sampling, char_dict, apply_at_the_start=True)
+    valid_monitor, loss, valid_freq_print, dump_path, 'f_sampling',
+    model, f_sampling, char_dict, apply_at_the_start=True)
 
 
 def custom_process_fun(generator_output):

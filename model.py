@@ -126,6 +126,7 @@ class MixtureGaussians2D:
              (1-tg_pin) * T.log(1 - bernoulli))
 
         c = T.sum(c * mask_seq) / T.sum(mask_seq)
+        c.name = 'negll'
 
         max_prop = T.argmax(prop, axis=1).mean()
         max_prop.name = 'max_prop'
@@ -133,7 +134,7 @@ class MixtureGaussians2D:
         std_max_prop = T.argmax(prop, axis=1).std()
         std_max_prop.name = 'std_max_prop'
 
-        return c, [max_prop, std_max_prop]
+        return c, [c, max_prop, std_max_prop]
 
 
 class UnconditionedModel:

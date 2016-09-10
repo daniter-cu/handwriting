@@ -12,6 +12,7 @@ from utilities import plot_seq_pt, plot_generated_sequences
 
 floatX = theano.config.floatX
 
+
 class Sampler(Extension):
     """Extension to pickle objects.
 
@@ -29,7 +30,7 @@ class Sampler(Extension):
         self.n_samples = n_samples
         self.n_hidden = n_hidden
 
-    def execute_virtual(self, batch_id, epoch_id):
+    def execute_virtual(self, batch_id, epoch_id=None):
         sample = self.fun_pred(np.zeros((self.n_samples, 3), floatX),
                                np.zeros((self.n_samples, self.n_hidden), floatX))
 
@@ -67,7 +68,7 @@ class SamplerCond(Extension):
         self.k_ini_mat = np.zeros((n_samples, model.n_mixt_attention), floatX)
         self.w_ini_mat = np.zeros((n_samples, model.n_chars), floatX)
 
-    def execute_virtual(self, batch_id, epoch_id):
+    def execute_virtual(self, batch_id, epoch_id=None):
 
         cond, cond_mask = char2int(self.sample_strings, self.dict_char2int)
 
@@ -104,7 +105,7 @@ class SamplingFunctionSaver(Saver):
         self.f_sampling = f_sampling
         self.dict_char2int = dict_char2int
 
-    def condition(self, batch_id):
+    def condition(self, batch_id, epoch_id):
         return True
         # if not self.val_monitor.history:
         #     return False
@@ -118,7 +119,7 @@ class SamplingFunctionSaver(Saver):
         return (self.model, self.f_sampling, self.dict_char2int), \
                ['extension executed']
 
-    def finish(self, bath_id):
+    def finish(self, bath_id, epoch_id):
         return -1, ['not executed at the end']
 
 
