@@ -9,7 +9,7 @@ Thanks to [Jose Sotelo](https://github.com/sotelo/) and [Kyle Kastner](https://g
 
 - Theano
 - Lasagne (just for the Adam optimizer)
-- [Raccoon](https://github.com/adbrebs/raccoon)
+- [Raccoon](https://github.com/adbrebs/raccoon): NEW: you need a earlier version: git checkout 5174d65e69f7cf7a7b8fd26db6b6eab9a48d0339
 
 ### Generate the data
 Download the following files and unpack them in a directory named 'handwriting':
