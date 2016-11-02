@@ -14,8 +14,7 @@ Thanks to [Jose Sotelo](https://github.com/sotelo/) and [Kyle Kastner](https://g
 ### Generate the data
 Download the following files and unpack them in a directory named 'handwriting':
 
-- http://www.iam.unibe.ch/~fkiwww/iamondb/data/lineStrokes-all.tar.gz 
-- http://www.iam.unibe.ch/~fkiwww/iamondb/data/ascii-all.tar.gz
+- http://www.fki.inf.unibe.ch/databases/iam-on-line-handwriting-database/download-the-iam-on-line-handwriting-database: the files lineStrokes-all.tar.gz and ascii-all.tar.gz
 - https://raw.githubusercontent.com/szcom/rnnlib/master/examples/online_prediction/validation_set.txt
 - https://github.com/szcom/rnnlib/blob/master/examples/online_prediction/training_set.txt
 
