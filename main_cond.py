@@ -2,6 +2,8 @@ import os
 import sys
 import cPickle
 
+sys.path.append("raccoon")
+
 from lasagne.updates import adam
 import numpy as np
 import theano

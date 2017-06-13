@@ -1,6 +1,8 @@
 import numpy as np
 import theano
 
+import sys
+sys.path.append("raccoon")
 
 import argparse
 import cPickle
