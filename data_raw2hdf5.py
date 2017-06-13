@@ -56,9 +56,9 @@ def read_file(file_path):
     pts = []
     pre_pt = np.array([])
     for trace in parse(file_path).getElementsByTagName('Stroke'):
-        for pts in trace.getElementsByTagName('Point'):
-            pt = np.array([pts.getAttribute('x').strip(),
-                           pts.getAttribute('y').strip(), 0],
+        for pts_el in trace.getElementsByTagName('Point'):
+            pt = np.array([pts_el.getAttribute('x').strip(),
+                           pts_el.getAttribute('y').strip(), 0],
                           dtype='float32')
             if not len(pre_pt):
                 pre_pt = pt
