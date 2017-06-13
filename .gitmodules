@@ -1,0 +1,3 @@
+[submodule "raccoon"]
+	path = raccoon
+	url = https://github.com/adbrebs/raccoon.git
