@@ -1,0 +1,4 @@
+967c967
+<         if getattr(self, '_op_use_c_code', theano.config.cxx):
+---
+>         if self._op_use_c_code:
