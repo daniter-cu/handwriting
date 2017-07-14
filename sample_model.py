@@ -54,5 +54,5 @@ if __name__ == '__main__':
     plot_generated_sequences(
         pt_gen, mats,
         mask_gen, folder_path='./',
-        file_name='a_just_now')
+        file_name='test_outputs/a_just_now')
     print 'done in {} seconds'.format(time.time() - beg)
