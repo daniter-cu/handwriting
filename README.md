@@ -7,8 +7,8 @@ Thanks to [Jose Sotelo](https://github.com/sotelo/) and [Kyle Kastner](https://g
 
 ### Requirements
 
-- Theano
-- Lasagne (just for the Adam optimizer)
+- Theano ('0.8.2')
+- Lasagne (0.1) (just for the Adam optimizer)
 - [Raccoon](https://github.com/adbrebs/raccoon): version 98b42b21e6df0ce09eaa7b9ad2dd10fcc993dd85
 
 ### Generate the data
