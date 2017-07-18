@@ -10,6 +10,7 @@ Thanks to [Jose Sotelo](https://github.com/sotelo/) and [Kyle Kastner](https://g
 - Theano ('0.8.2')
 - Lasagne (0.1) (just for the Adam optimizer)
 - [Raccoon](https://github.com/adbrebs/raccoon): version 98b42b21e6df0ce09eaa7b9ad2dd10fcc993dd85
+- Apply patch to "/var/opt/wba/apps/anaconda2/lib/python2.7/site-packages/theano/gof/op.py"
 
 ### Generate the data
 Download the following files and unpack them in a directory named 'handwriting':
