@@ -36,3 +36,8 @@ python sample_model.py -f $TMP_PATH/handwriting/EXP_ID/f_sampling.pkl -s 'Sous l
 where EXP_ID is the generated id of the experiment you launched.
 
 ![img](https://raw.githubusercontent.com/adbrebs/handwriting/master/sous_le_pont_Mirabeau_2.png "Guillaume Apollinaire")
+
+
+## DAN notes:
+vi /var/opt/wba/apps/anaconda2/lib/python2.7/site-packages/lasagne/layers/pool.py
+- I removed the include of downsample
