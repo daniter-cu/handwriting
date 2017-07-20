@@ -9,7 +9,7 @@ import cPickle
 import time
 
 from data import char2int
-from utilities import plot_generated_sequences
+from utilities import plot_generated_sequences, plot_generated_sequences_from_file
 
 floatX = theano.config.floatX
 
@@ -21,8 +21,12 @@ if __name__ == '__main__':
     parser.add_argument('-s', '--sample_string', default='Hello world')
     parser.add_argument('-b', '--bias', type=float, default=0.5)
     parser.add_argument('-n', '--n_times', type=int, default=4)
+    parser.add_argument('-l', '--sample_file', default=None)
 
     options = parser.parse_args()
+    sample_file = options.sample_file
+    if sample_file:
+        print sample_file
 
     print 'Unpickling... ',
     model, f_sampling, dict_char2int = \
@@ -31,6 +35,11 @@ if __name__ == '__main__':
 
     n = options.n_times
     sample_string = [options.sample_string + ' '] * n
+    if sample_file:
+        sample_string = []
+        with open(sample_file, "r") as f:
+            for line in f:
+                sample_string.append(str(line.strip())+' ')
 
     cond, cond_mask = char2int(sample_string, dict_char2int)
 
@@ -51,8 +60,14 @@ if __name__ == '__main__':
             (w_gen, 'omega')]
     print 'Printing...',
     beg = time.clock()
-    plot_generated_sequences(
-        pt_gen, mats,
-        mask_gen, folder_path='./',
-        file_name='test_outputs/a_just_now')
+    if not sample_file:
+        plot_generated_sequences(
+                pt_gen, mats,
+                mask_gen, folder_path='./',
+                file_name='test_outputs/a_just_now')
+    else:
+        plot_generated_sequences_from_file(
+                pt_gen, mats,
+                mask_gen, folder_path='./test_outputs/')
+
     print 'done in {} seconds'.format(time.time() - beg)

@@ -15,6 +15,41 @@ M_y = 0.11457
 s_x = 40.3719
 s_y = 37.0466
 
+def plot_generated_sequences_from_file(pt_batch, other_mats=None, pt_mask=None,
+                             show=False, folder_path=None):
+    """
+    Plot sequences of (x, y, penup) points and other information
+
+    Parameters:
+    -----------
+    pt_batch: numpy array (seq_length, batch_size, 3)
+    other_mats: list of numpy arrays of shapes (seq_length, batch_size)
+    pt_mask: numpy array (seq_length, batch_size)
+    """
+    if not other_mats:
+        other_mats = []
+
+    # Renorm batch
+    batch_normed = np.zeros_like(pt_batch, dtype=pt_batch.dtype)
+    batch_normed[:] = pt_batch
+    batch_normed[:, :, 0] = s_x * batch_normed[:, :, 0] + M_x
+    batch_normed[:, :, 1] = s_y * batch_normed[:, :, 1] + M_y
+
+    n_samples = batch_normed.shape[1]
+    n_mats = len(other_mats)
+
+    for i in range(n_samples):
+        print "rendering one"
+        fig = plt.figure(figsize=(10*n_samples, (1 + n_mats) * 3))
+        mask_term = pt_mask[:, i].astype(bool)
+        splot_pt = plt.subplot2grid((1 + n_mats, n_samples), (0, i))
+        plot_seq(splot_pt, batch_normed[:, i], mask_term)
+        fig.savefig(os.path.join(folder_path, str(i)+'.png'), bbox_inches='tight')#, dpi=200)
+
+    if show:
+        plt.show()
+    plt.close()
+
 
 def plot_generated_sequences(pt_batch, other_mats=None, pt_mask=None,
                              show=False, folder_path=None, file_name=None):
