@@ -1,5 +1,13 @@
+backports.functools-lru-cache==1.4
+cycler==0.10.0
+h5py==2.7.1
 Lasagne==0.1
+matplotlib==2.1.0
 numpy==1.13.3
+pyparsing==2.2.0
+python-dateutil==2.6.1
+pytz==2017.2
 scipy==0.19.1
 six==1.11.0
+subprocess32==3.2.7
 Theano==0.8.2
