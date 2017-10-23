@@ -4,4 +4,6 @@ intermediate
 *.pyc
 *.xml
 png.*
+.DS_Store
+test_outputs/
 hw
