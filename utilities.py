@@ -5,8 +5,8 @@ import matplotlib
 matplotlib.use('Agg')
 import matplotlib.pyplot as plt
 from mpl_toolkits.axes_grid1 import make_axes_locatable
-
 import theano
+import io
 
 floatX = theano.config.floatX
 
@@ -14,6 +14,41 @@ M_x = 8.18586
 M_y = 0.11457
 s_x = 40.3719
 s_y = 37.0466
+
+def plot_generated_sequences_for_endpoint(pt_batch, other_mats=None, pt_mask=None,
+                             show=False):
+    """
+    Plot sequences of (x, y, penup) points and other information
+
+    Parameters:
+    -----------
+    pt_batch: numpy array (seq_length, batch_size, 3)
+    other_mats: list of numpy arrays of shapes (seq_length, batch_size)
+    pt_mask: numpy array (seq_length, batch_size)
+    """
+    if not other_mats:
+        other_mats = []
+
+    # Renorm batch
+    batch_normed = np.zeros_like(pt_batch, dtype=pt_batch.dtype)
+    batch_normed[:] = pt_batch
+    batch_normed[:, :, 0] = s_x * batch_normed[:, :, 0] + M_x
+    batch_normed[:, :, 1] = s_y * batch_normed[:, :, 1] + M_y
+
+    n_samples = batch_normed.shape[1]
+    n_mats = len(other_mats)
+    buf = io.BytesIO()
+    for i in range(n_samples):
+        print "rendering one"
+        fig = plt.figure(figsize=(10*n_samples, (1 + n_mats) * 3))
+        mask_term = pt_mask[:, i].astype(bool)
+        splot_pt = plt.subplot2grid((1 + n_mats, n_samples), (0, i))
+        plot_seq(splot_pt, batch_normed[:, i], mask_term)
+        fig.savefig(buf, bbox_inches='tight')#, dpi=200)
+        buf.close()
+        break
+    plt.close()
+    return buf
 
 def plot_generated_sequences_from_file(pt_batch, other_mats=None, pt_mask=None,
                              show=False, folder_path=None):
