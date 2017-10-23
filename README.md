@@ -46,4 +46,4 @@ vi /var/opt/wba/apps/anaconda2/lib/python2.7/site-packages/lasagne/layers/pool.p
 
 - generate data : $ DATA_PATH=. python data_raw2hdf5.py  
 
-
+On newer systems you may need to prepend this : THEANO_FLAGS="gcc.cxxflags='-march=native'" so that the correct theano c++ compiler is used.  
