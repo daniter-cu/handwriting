@@ -8,7 +8,7 @@ theano.config.floatX = 'float32'
 floatX = theano.config.floatX
 
 
-def load_data(filename='hand_training.hdf5'):
+def load_data(filename='handwriting_training.hdf5'):
     data_folder = os.path.join(os.environ['DATA_PATH'], 'handwriting')
     training_data_file = os.path.join(data_folder, filename)
     train_data = h5py.File(training_data_file, 'r')

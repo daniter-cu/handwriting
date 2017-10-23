@@ -43,3 +43,7 @@ where EXP_ID is the generated id of the experiment you launched.
 ## DAN notes:
 vi /var/opt/wba/apps/anaconda2/lib/python2.7/site-packages/lasagne/layers/pool.py
 - I removed the include of downsample
+
+- generate data : $ DATA_PATH=. python data_raw2hdf5.py  
+
+

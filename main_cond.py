@@ -52,12 +52,12 @@ char_dict, inv_char_dict = cPickle.load(open('char_dict.pkl', 'r'))
 
 # All the data is loaded in memory
 train_pt_seq, train_pt_idx, train_str_seq, train_str_idx = \
-    load_data('hand_training.hdf5')
+    load_data('handwriting_training.hdf5')
 train_batch_gen = create_generator(
     True, batch_size,
     train_pt_seq, train_pt_idx, train_str_seq, train_str_idx, chunk=chunk)
 valid_pt_seq, valid_pt_idx, valid_str_seq, valid_str_idx = \
-    load_data('hand_training.hdf5')
+    load_data('handwriting_training.hdf5')
 valid_batch_gen = create_generator(
     True, batch_size,
     valid_pt_seq, valid_pt_idx, valid_str_seq, valid_str_idx, chunk=chunk)
