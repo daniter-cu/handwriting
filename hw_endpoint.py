@@ -47,7 +47,6 @@ class HWGenerator(object):
         p_gen = np.swapaxes(p_gen, 1, 2)
         mats = [(a_gen, 'alpha'), (k_gen, 'kapa'), (p_gen, 'phi'),
                 (w_gen, 'omega')]
-        log.debug( 'Printing...')
         beg = time.clock()
         img = plot_generated_sequences_for_endpoint(
                 pt_gen, mats,
