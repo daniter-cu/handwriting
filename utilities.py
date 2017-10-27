@@ -222,3 +222,5 @@ def create_gen_tag_values(model, pt_ini, h_ini_pred, k_ini_pred, w_ini_pred,
     bias.tag.test_value = np.float32(0.0)
     seq_str.tag.test_value = np.zeros((f_s_str, n_samples), dtype='int32')
     seq_str_mask.tag.test_value = np.ones((f_s_str, n_samples), dtype=floatX)
+
+# comment.
