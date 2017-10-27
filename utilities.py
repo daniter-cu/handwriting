@@ -2,11 +2,12 @@ import os
 
 import numpy as np
 import matplotlib
-matplotlib.use('Agg')
+#matplotlib.use('Agg')
 import matplotlib.pyplot as plt
 from mpl_toolkits.axes_grid1 import make_axes_locatable
 import theano
 import io
+from PIL import Image
 
 floatX = theano.config.floatX
 
@@ -40,13 +41,17 @@ def plot_generated_sequences_for_endpoint(pt_batch, other_mats=None, pt_mask=Non
     buf = io.BytesIO()
     for i in range(n_samples):
         print "rendering one"
+
         fig = plt.figure(figsize=(10*n_samples, (1 + n_mats) * 3))
         mask_term = pt_mask[:, i].astype(bool)
         splot_pt = plt.subplot2grid((1 + n_mats, n_samples), (0, i))
         plot_seq(splot_pt, batch_normed[:, i], mask_term)
         fig.savefig(buf, bbox_inches='tight')#, dpi=200)
-        buf.close()
+        #buf.close()
+        buf.seek(0)
         break
+
+
     plt.close()
     return buf
 

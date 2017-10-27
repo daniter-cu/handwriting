@@ -1,19 +1,19 @@
-import numpy as np
-import theano
 import logging as log
-
 import sys
+
+import numpy as np
 import os
+import theano
+
 sys.path.append(os.path.dirname(os.path.realpath(__file__))+"/raccoon")
 sys.path.append(os.path.dirname(os.path.realpath(__file__)))
 
-import argparse
 import cPickle
 import time
 
 
 from data import char2int
-from utilities import plot_generated_sequences_for_endpoint
+#from utilities import plot_generated_sequences_for_endpoint
 
 floatX = theano.config.floatX
 
@@ -48,9 +48,9 @@ class HWGenerator(object):
         mats = [(a_gen, 'alpha'), (k_gen, 'kapa'), (p_gen, 'phi'),
                 (w_gen, 'omega')]
         beg = time.clock()
-        img = plot_generated_sequences_for_endpoint(
-                pt_gen, mats,
-                mask_gen)
-
+        #img = plot_generated_sequences_for_endpoint(
+        #        pt_gen, mats,
+        #        mask_gen)
+        img = {"batch":pt_gen, "mats":mats, "mask":mask_gen}
         log.debug( 'done in {} seconds'.format(time.time() - beg) )
         return img
